@@ -62,14 +62,14 @@ SecureLance is a revolutionary blockchain-powered freelancing platform that brin
     <td width="50%">
       <h3 align="center">💰 Smart Contract Escrow</h3>
       <p align="center">
-        <img src="public/placeholder.svg" width="100%" alt="Escrow System" /><br/>
+        <img src="public/placeholder.png" width="100%" alt="Escrow System" /><br/>
         Funds are securely locked in blockchain-based escrow until predefined conditions are met.
       </p>
     </td>
     <td width="50%">
       <h3 align="center">🔐 Milestone-Based Payments</h3>
       <p align="center">
-        <img src="public/milestone.svg" width="100%" alt="Milestone Payments" /><br/>
+        <img src="public/milestone.png" width="100%" alt="Milestone Payments" /><br/>
         Release payments automatically as project milestones are completed and verified.
       </p>
     </td>
@@ -78,14 +78,14 @@ SecureLance is a revolutionary blockchain-powered freelancing platform that brin
     <td width="50%">
       <h3 align="center">⭐ Decentralized Reputation</h3>
       <p align="center">
-        <img src="public/reputation.svg" width="100%" alt="Reputation System" /><br/>
+        <img src="public/reputation.png" width="100%" alt="Reputation System" /><br/>
         Tamper-proof reputation system with NFT badges to showcase verified skills and credentials.
       </p>
     </td>
     <td width="50%">
       <h3 align="center">📁 IPFS File Submission</h3>
       <p align="center">
-        <img src="public/storage.svg" width="100%" alt="IPFS Integration" /><br/>
+        <img src="public/storage.png" width="100%" alt="IPFS Integration" /><br/>
         Decentralized storage ensures deliverables remain accessible and immutable forever.
       </p>
     </td>
