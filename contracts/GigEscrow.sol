@@ -5,11 +5,23 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/metatx/ERC2771Context.sol";
-
+import "./ReputationBadge.sol";
 
 contract GigEscrow is ERC2771Context, ReentrancyGuard {
 
     using SafeERC20 for IERC20;
+
+    // Interface for the ReputationBadge contract
+    ReputationBadge public reputationBadge;
+    bool public badgesEnabled = false;
+    
+    // Streak tracking for freelancers
+    mapping(address => uint256) public freelancerCurrentStreak;
+    mapping(address => uint256) public freelancerMaxStreak;
+    // Track if a freelancer has had disputes
+    mapping(address => bool) public freelancerHasHadDispute;
+    // Track consecutive completed gigs without disputes
+    mapping(address => uint256) public freelancerDisputeFreeGigs;
 
     struct Milestone {
         string description;
@@ -30,7 +42,7 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
         address token;  // ERC20 token address (zero for ETH)
     }
 
-    enum State { Open, InProgress, Disputed, Completed, CancelledByClient, CancelledByFreelancer }
+    enum State { Open, InProgress, Disputed, Completed, CancelledByClient, CancelledByFreelancer, AwaitingResolution }
 
     address public arbitrator;
     mapping(uint => string) public badgeUrisByCount;
@@ -40,7 +52,8 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
         string reason;
         bool exists;
         bool resolved;
-        bool freelancerWins;
+        address resolutionAuthority; // Address authorized to submit final resolution
+        bytes resolutionData; // Optional data related to off-chain resolution (e.g., IPFS hash)
     }
 
     mapping(uint => Dispute) public disputes;
@@ -67,9 +80,13 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
     event GigCancelledByFreelancer(uint indexed gigId, uint refundAmount);
     event FreelancerReputationUpdated(address indexed freelancer, uint completedGigs, uint totalEarned);
     event DisputeRaised(uint indexed gigId, address indexed by, string reason);
-    event DisputeResolved(uint indexed gigId, bool freelancerWins, uint amount);
+    event DisputeResolutionSubmitted(uint indexed gigId, address indexed authority, bytes resolutionData, uint amountReleasedToFreelancer, uint amountReturnedToClient);
     event GigStarted(uint indexed gigId, address indexed freelancer, uint startTime);
     event GigCompletedDetailed(uint indexed gigId, address indexed freelancer, uint startTime, uint completionTime, uint duration);
+    event ResolutionAuthorityUpdated(address indexed newAuthority);
+    event BadgeContractUpdated(address indexed badgeContract);
+    event BadgeMinted(address indexed freelancer, uint256 indexed tokenId, uint8 badgeType, uint256 level);
+    event BadgesToggled(bool enabled);
 
     modifier onlyClient(uint _gigId) {
         require(gigs[_gigId].exists, "GigEscrow: Gig does not exist");
@@ -95,14 +112,48 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
         _;
     }
 
+    modifier onlyResolutionAuthority(uint _gigId) {
+        require(disputes[_gigId].exists, "GigEscrow: Dispute does not exist");
+        require(_msgSender() == disputes[_gigId].resolutionAuthority, "GigEscrow: Only the resolution authority can call this");
+        _;
+    }
+
     constructor() ERC2771Context(address(0)) {
         arbitrator = _msgSender();
+    }
+
+    function setResolutionAuthority(address _newAuthority) external onlyArbitrator {
+        arbitrator = _newAuthority; // Re-using arbitrator for simplicity, could be a separate variable
+        emit ResolutionAuthorityUpdated(_newAuthority);
     }
 
     // Admin config for staking
     function setStakeParams(address _stakeToken, uint _stakeAmount) external onlyArbitrator {
         stakeToken = _stakeToken;
         stakeAmount = _stakeAmount;
+    }
+
+    // New function to set the badge contract address
+    function setReputationBadgeContract(address _badgeContract) external onlyArbitrator {
+        reputationBadge = ReputationBadge(_badgeContract);
+        emit BadgeContractUpdated(_badgeContract);
+    }
+    
+    // Toggle badges functionality
+    function toggleBadges(bool _enabled) external onlyArbitrator {
+        badgesEnabled = _enabled;
+        emit BadgesToggled(_enabled);
+    }
+
+    // New function to grant initiative badge to a user
+    function grantInitiativeBadge(address _user) external {
+        require(badgesEnabled && address(reputationBadge) != address(0), "GigEscrow: Badges not enabled");
+        
+        uint256 badgeId = reputationBadge.mintInitiativeBadge(_user);
+        
+        if (badgeId > 0) {
+            emit BadgeMinted(_user, badgeId, uint8(ReputationBadge.BadgeType.INITIATIVE), 1);
+        }
     }
 
     function postGig(
@@ -151,6 +202,11 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
 
         nextGigId++;
         emit GigPosted(currentGigId, _msgSender(), calculatedTotalBudget, _description, newGig.milestones.length);
+        
+        // Automatically grant initiative badge to client posting a gig
+        if (badgesEnabled && address(reputationBadge) != address(0)) {
+            reputationBadge.mintInitiativeBadge(_msgSender());
+        }
     }
 
     // Freelancer stakes to bid on a gig
@@ -160,6 +216,11 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
         IERC20(stakeToken).safeTransferFrom(_msgSender(), address(this), stakeAmount);
         hasBid[_gigId][_msgSender()] = true;
         bidders[_gigId].push(_msgSender());
+        
+        // Automatically grant initiative badge when a freelancer places a bid
+        if (badgesEnabled && address(reputationBadge) != address(0)) {
+            reputationBadge.mintInitiativeBadge(_msgSender());
+        }
     }
 
     function selectFreelancer(uint _gigId, address payable _freelancer)
@@ -203,7 +264,65 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
             address freelancer = gig.freelancer;
             freelancerCompletedGigs[freelancer]++;
             freelancerTotalEarned[freelancer] += gig.totalBudget;
+            
+            // Update freelancer's streak
+            freelancerCurrentStreak[freelancer]++;
+            if (freelancerCurrentStreak[freelancer] > freelancerMaxStreak[freelancer]) {
+                freelancerMaxStreak[freelancer] = freelancerCurrentStreak[freelancer];
+            }
+            
+            // Update dispute-free count if freelancer has never had a dispute
+            if (!freelancerHasHadDispute[freelancer]) {
+                freelancerDisputeFreeGigs[freelancer]++;
+            }
+            
+            // Check for badge eligibility and mint/upgrade if appropriate
+            if (badgesEnabled && address(reputationBadge) != address(0)) {
+                // Check for completed gigs badge
+                uint256 badgeId = reputationBadge.mintBadge(
+                    freelancer,
+                    ReputationBadge.BadgeType.COMPLETED_GIGS,
+                    freelancerCompletedGigs[freelancer]
+                );
+                if (badgeId > 0) {
+                    emit BadgeMinted(freelancer, badgeId, uint8(ReputationBadge.BadgeType.COMPLETED_GIGS), reputationBadge.getBadgeDetails(badgeId).level);
+                }
+                
+                // Check for earnings milestone badge
+                badgeId = reputationBadge.mintBadge(
+                    freelancer,
+                    ReputationBadge.BadgeType.EARNINGS_MILESTONE,
+                    freelancerTotalEarned[freelancer]
+                );
+                if (badgeId > 0) {
+                    emit BadgeMinted(freelancer, badgeId, uint8(ReputationBadge.BadgeType.EARNINGS_MILESTONE), reputationBadge.getBadgeDetails(badgeId).level);
+                }
+                
+                // Check for streak badge
+                badgeId = reputationBadge.mintBadge(
+                    freelancer,
+                    ReputationBadge.BadgeType.STREAK,
+                    freelancerMaxStreak[freelancer]
+                );
+                if (badgeId > 0) {
+                    emit BadgeMinted(freelancer, badgeId, uint8(ReputationBadge.BadgeType.STREAK), reputationBadge.getBadgeDetails(badgeId).level);
+                }
+                
+                // Check for dispute-free badge
+                if (!freelancerHasHadDispute[freelancer]) {
+                    badgeId = reputationBadge.mintBadge(
+                        freelancer,
+                        ReputationBadge.BadgeType.DISPUTE_FREE,
+                        freelancerDisputeFreeGigs[freelancer]
+                    );
+                    if (badgeId > 0) {
+                        emit BadgeMinted(freelancer, badgeId, uint8(ReputationBadge.BadgeType.DISPUTE_FREE), reputationBadge.getBadgeDetails(badgeId).level);
+                    }
+                }
+            }
+            
             emit FreelancerReputationUpdated(freelancer, freelancerCompletedGigs[freelancer], freelancerTotalEarned[freelancer]);
+            
             // Return stake to freelancer
             if (stakeToken != address(0) && stakeAmount > 0) {
                 IERC20(stakeToken).safeTransfer(freelancer, stakeAmount);
@@ -270,6 +389,10 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
         }
 
         gig.state = State.CancelledByFreelancer;
+        
+        // Reset streak on cancellation
+        address freelancer = gig.freelancer;
+        freelancerCurrentStreak[freelancer] = 0;
 
         if (refundAmount > 0) {
             if (gig.token == address(0)) {
@@ -297,71 +420,84 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
             reason: _reason,
             exists: true,
             resolved: false,
-            freelancerWins: false
+            resolutionAuthority: arbitrator, // Initially set to arbitrator, can be updated
+            resolutionData: ""
         });
-        gig.state = State.Disputed;
+        gig.state = State.Disputed; // Backend handles AI/Voting, contract awaits resolution
+        
+        // Mark freelancer as having had a dispute
+        freelancerHasHadDispute[gig.freelancer] = true;
+        // Reset streak since there is a dispute
+        freelancerCurrentStreak[gig.freelancer] = 0;
+        
         emit DisputeRaised(_gigId, _msgSender(), _reason);
     }
 
-    function resolveDispute(uint _gigId, bool _freelancerWins)
+    function submitDisputeResolution(uint _gigId, bool _releaseToFreelancer, bytes memory _resolutionData)
         public
-        onlyArbitrator
+        onlyResolutionAuthority(_gigId)
         inState(_gigId, State.Disputed)
         nonReentrant
     {
         Gig storage gig = gigs[_gigId];
         Dispute storage d = disputes[_gigId];
-        require(d.exists && !d.resolved, "GigEscrow: No active dispute");
+        require(d.exists && !d.resolved, "GigEscrow: No active dispute or already resolved");
 
         uint remainingAmount = 0;
         for (uint i = 0; i < gig.milestones.length; i++) {
             if (!gig.milestones[i].completed) {
                 remainingAmount += gig.milestones[i].value;
-                gig.milestones[i].completed = true;
             }
         }
 
         d.resolved = true;
-        d.freelancerWins = _freelancerWins;
-        if (_freelancerWins) {
-            // record completion
-            uint startTime = gigStartTime[_gigId];
-            uint completionTime = block.timestamp;
-            gigCompletionTime[_gigId] = completionTime;
-            emit GigCompletedDetailed(_gigId, gig.freelancer, startTime, completionTime, completionTime - startTime);
+        d.resolutionData = _resolutionData;
 
-            gig.state = State.Completed;
-            gig.completedMilestoneCount = gig.milestones.length;
+        uint amountToFreelancer = 0;
+        uint amountToClient = 0;
+
+        if (_releaseToFreelancer) {
+            amountToFreelancer = remainingAmount;
+            gig.state = State.Completed; // Considered completed if freelancer paid
+            gig.completedMilestoneCount = gig.milestones.length; // Mark all as completed
+            for (uint i = 0; i < gig.milestones.length; i++) {
+                 if (!gig.milestones[i].completed) { gig.milestones[i].completed = true; }
+            }
+
             address freelancer = gig.freelancer;
             freelancerCompletedGigs[freelancer]++;
             freelancerTotalEarned[freelancer] += remainingAmount;
             emit FreelancerReputationUpdated(freelancer, freelancerCompletedGigs[freelancer], freelancerTotalEarned[freelancer]);
-            // Return stake to freelancer
+
             if (stakeToken != address(0) && stakeAmount > 0) {
                 IERC20(stakeToken).safeTransfer(freelancer, stakeAmount);
             }
         } else {
-            gig.state = State.CancelledByClient;
-            // Slash stake: transfer to client
+            amountToClient = remainingAmount;
+            gig.state = State.CancelledByClient; // Or a new 'ResolvedAgainstFreelancer' state?
             if (stakeToken != address(0) && stakeAmount > 0) {
                 IERC20(stakeToken).safeTransfer(gig.client, stakeAmount);
             }
         }
 
-        // Transfer remaining funds
-        if (remainingAmount > 0) {
-            if (gig.token == address(0)) {
-                address recipient = _freelancerWins ? gig.freelancer : gig.client;
-                (bool success, ) = payable(recipient).call{value: remainingAmount}("");
-                require(success, "GigEscrow: Dispute transfer failed");
+        if (amountToFreelancer > 0) {
+             if (gig.token == address(0)) {
+                (bool success, ) = payable(gig.freelancer).call{value: amountToFreelancer}("");
+                require(success, "GigEscrow: Dispute transfer to freelancer failed");
             } else {
-                IERC20 token = IERC20(gig.token);
-                address recipient = _freelancerWins ? gig.freelancer : gig.client;
-                token.safeTransfer(recipient, remainingAmount);
+                IERC20(gig.token).safeTransfer(gig.freelancer, amountToFreelancer);
+            }
+        }
+        if (amountToClient > 0) {
+             if (gig.token == address(0)) {
+                (bool success, ) = payable(gig.client).call{value: amountToClient}("");
+                require(success, "GigEscrow: Dispute transfer to client failed");
+            } else {
+                IERC20(gig.token).safeTransfer(gig.client, amountToClient);
             }
         }
 
-        emit DisputeResolved(_gigId, _freelancerWins, remainingAmount);
+        emit DisputeResolutionSubmitted(_gigId, _msgSender(), _resolutionData, amountToFreelancer, amountToClient);
     }
 
     function getGig(uint _gigId) public view returns (Gig memory) {
@@ -381,6 +517,41 @@ contract GigEscrow is ERC2771Context, ReentrancyGuard {
 
     function getFreelancerTotalEarned(address _freelancer) public view returns (uint) {
         return freelancerTotalEarned[_freelancer];
+    }
+
+    // Additional view functions for badge-related data
+    function getFreelancerStreakInfo(address _freelancer) external view returns (uint256 currentStreak, uint256 maxStreak) {
+        return (freelancerCurrentStreak[_freelancer], freelancerMaxStreak[_freelancer]);
+    }
+    
+    function getFreelancerDisputeInfo(address _freelancer) external view returns (bool hasHadDispute, uint256 disputeFreeGigs) {
+        return (freelancerHasHadDispute[_freelancer], freelancerDisputeFreeGigs[_freelancer]);
+    }
+
+    // Special badges can be granted by the arbitrator for exceptional achievements
+    function grantSpecialBadge(address _freelancer, string memory _badgeURI) external onlyArbitrator {
+        require(badgesEnabled && address(reputationBadge) != address(0), "GigEscrow: Badges not enabled");
+        
+        // First set the URI for the special badge
+        reputationBadge.setBadgeURI(ReputationBadge.BadgeType.SPECIAL, 1, _badgeURI);
+        
+        // Then mint the badge
+        uint256 badgeId = reputationBadge.mintBadge(
+            _freelancer,
+            ReputationBadge.BadgeType.SPECIAL,
+            1  // Special badges all have value of 1
+        );
+        
+        if (badgeId > 0) {
+            emit BadgeMinted(_freelancer, badgeId, uint8(ReputationBadge.BadgeType.SPECIAL), 1);
+        }
+    }
+
+    // Ensure you add this somewhere in your contract code to mint initiative badges when someone connects their wallet
+    function connectUser(address _user) external {
+        if (badgesEnabled && address(reputationBadge) != address(0)) {
+            reputationBadge.mintInitiativeBadge(_user);
+        }
     }
 
     receive() external payable {}

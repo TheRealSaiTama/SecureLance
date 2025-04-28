@@ -1,6 +1,7 @@
 import Gig from '../models/Gig.js';
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
+import crypto from 'crypto';
 
 export const createGig = asyncHandler(async (req, res) => {
     const { clientAddress, description, budget, contractGigId, escrowContractAddress } = req.body;
@@ -151,4 +152,59 @@ export const completeGig = asyncHandler(async (req, res) => {
     const updatedGig = await gig.save();
 
     res.status(200).json(updatedGig);
+});
+
+export const createCollaborativeWorkspace = asyncHandler(async (req, res) => {
+    const { contractGigId } = req.params;
+    const { escrowContractAddress } = req.query;
+    const userAddress = req.user.walletAddress.toLowerCase();
+
+    if (!escrowContractAddress) {
+        res.status(400);
+        throw new Error('Escrow contract address is required');
+    }
+
+    // Find the gig
+    const gig = await Gig.findOne({ contractGigId, escrowContractAddress });
+
+    if (!gig) {
+        res.status(404);
+        throw new Error('Gig not found');
+    }
+
+    // Verify that the user is either the client or the freelancer
+    if (gig.clientAddress.toLowerCase() !== userAddress && 
+        (!gig.freelancerAddress || gig.freelancerAddress.toLowerCase() !== userAddress)) {
+        res.status(403);
+        throw new Error('Only the client or assigned freelancer can access the collaborative workspace');
+    }
+
+    // Only allow collaboration for InProgress gigs
+    if (gig.status !== 'InProgress') {
+        res.status(400);
+        throw new Error('Collaborative workspace is only available for active contracts');
+    }
+
+    // If workspace URL doesn't exist yet, create one
+    if (!gig.collaborativeWorkspaceUrl) {
+        // Generate a unique workspace ID based on the contract ID
+        const workspaceId = crypto.createHash('sha256')
+            .update(`${gig.contractGigId}-${Date.now()}`)
+            .digest('hex')
+            .substring(0, 12);
+            
+        // Use Etherpad as an example, but this could be any collaborative tool API
+        // In a real implementation, you might want to use an actual API call to create the pad
+        const etherpadBaseUrl = process.env.ETHERPAD_BASE_URL || 'https://etherpad.wikimedia.org/p/';
+        gig.collaborativeWorkspaceUrl = `${etherpadBaseUrl}securelance-${workspaceId}`;
+        
+        await gig.save();
+        console.log(`[createCollaborativeWorkspace] Created workspace for gig: ${gig.contractGigId}`);
+    }
+
+    res.status(200).json({ 
+        collaborativeWorkspaceUrl: gig.collaborativeWorkspaceUrl,
+        contractGigId: gig.contractGigId,
+        message: 'Collaborative workspace accessed successfully'
+    });
 });

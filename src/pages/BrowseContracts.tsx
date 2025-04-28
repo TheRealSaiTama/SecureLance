@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import axios from 'axios';
 import { formatEther } from 'viem';
 import { useAccount, useWatchContractEvent, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { contractAddress, contractABI } from '@/config/contractConfig';
+import { gigEscrowAddress, gigEscrowABI } from '@/config/contractConfig';
 import { decodeEventLog, AbiEventNotFoundError } from 'viem';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -37,6 +37,7 @@ const BrowseContracts: React.FC = () => {
   const { toast } = useToast();
   const { address: userAddress } = useAccount();
   const { addNotification } = useNotifications();
+  const [disputeIds, setDisputeIds] = useState<{ [gigId: string]: string }>({});
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002';
 
@@ -93,6 +94,12 @@ const BrowseContracts: React.FC = () => {
     const setupEventListener = async () => {
       if (!isActive) return;
       
+      // Defensive check for gigEscrowABI
+      if (!Array.isArray(gigEscrowABI)) {
+        setEventListenerError("Contract ABI is not loaded. Please refresh or check your build.");
+        console.error("gigEscrowABI is not loaded or not an array", gigEscrowABI);
+        return;
+      }
       try {
         // Check if ethereum is available (without using it as a constructor)
         if (!window.ethereum) {
@@ -102,7 +109,7 @@ const BrowseContracts: React.FC = () => {
         }
         
         const eventName = 'GigPosted';
-        const gigPostedEventAbi = contractABI.find(
+        const gigPostedEventAbi = gigEscrowABI.find(
           (item) => item.type === 'event' && item.name === eventName
         );
         
@@ -149,7 +156,7 @@ const BrowseContracts: React.FC = () => {
         }
       }
     };
-  }, [contractAddress, userAddress]);
+  }, [gigEscrowAddress, userAddress]);
   
   // Handle manual refresh when event listener fails
   const handleRefresh = () => {
@@ -201,9 +208,35 @@ const BrowseContracts: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const fetchDisputesForGigs = async () => {
+      const ids: { [gigId: string]: string } = {};
+      for (const gig of gigs) {
+        try {
+          const res = await axios.get(`/api/v1/disputes/gig/${gig.contractGigId}`);
+          if (res.data && res.data.length > 0) {
+            ids[gig._id] = res.data[0]._id;
+          }
+        } catch {}
+      }
+      setDisputeIds(ids);
+    };
+    if (gigs.length > 0) fetchDisputesForGigs();
+  }, [gigs]);
+
   if (isLoading) {
     return <div className="container mx-auto p-4 text-center">Loading available gigs...</div>;
   }
+
+  const validGigs = gigs.filter(gig => {
+    try {
+      const numericPart = gig.contractGigId.split('-')[0];
+      BigInt(numericPart);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 
   return (
     <div className="container mx-auto p-4 md:p-8">
@@ -223,11 +256,11 @@ const BrowseContracts: React.FC = () => {
         </Alert>
       )}
       
-      {gigs.length === 0 ? (
+      {validGigs.length === 0 ? (
         <p className="text-center text-muted-foreground">No open gigs found at the moment. Check back later or post your own!</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {gigs.map((gig) => (
+          {validGigs.map((gig) => (
             <Card key={gig._id} className="flex flex-col">
               <CardHeader>
                 <CardTitle className="text-lg truncate" title={gig.description}>{gig.description}</CardTitle>
@@ -250,10 +283,10 @@ const BrowseContracts: React.FC = () => {
                 {/* Bid button for freelancers */}
                 {gig.status === 'Open' && userAddress && gig.clientAddress.toLowerCase() !== userAddress.toLowerCase() && (
                   <Button onClick={() => writeBid({
-                    address: contractAddress as `0x${string}`,
-                    abi: contractABI,
+                    address: gigEscrowAddress as `0x${string}`,
+                    abi: gigEscrowABI,
                     functionName: 'bidGig',
-                    args: [BigInt(gig.contractGigId)],
+                    args: [BigInt(gig.contractGigId.split('-')[0])],
                   })} disabled={isBidPending} className="w-full mb-2">
                     {isBidPending ? 'Staking...' : 'Bid on Gig'}
                   </Button>
@@ -265,6 +298,17 @@ const BrowseContracts: React.FC = () => {
                 )}
                 {gig.clientAddress.toLowerCase() === userAddress?.toLowerCase() && (
                   <p className="text-xs text-muted-foreground w-full text-center">This is your gig.</p>
+                )}
+                {disputeIds[gig._id] && (
+                  <Button
+                    variant="outline"
+                    className="w-full mt-2"
+                    onClick={() => {
+                      window.location.href = `/disputes/${disputeIds[gig._id]}`;
+                    }}
+                  >
+                    View Dispute
+                  </Button>
                 )}
               </CardFooter>
             </Card>

@@ -21,7 +21,7 @@ export const Leaderboard: React.FC = () => {
     const fetchLeaders = async () => {
       setLoading(true);
       try {
-        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
+        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002';
         const res = await axios.get(`${apiUrl}/api/v1/analytics/leaderboard`, {
           headers: { Authorization: token ? `Bearer ${token}` : '' }
         });

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, decodeEventLog, AbiEventNotFoundError } from 'viem';
-import { contractAddress, contractABI } from '@/config/contractConfig';
+import { gigEscrowAddress, gigEscrowABI } from '@/config/contractConfig';
 import axios from 'axios';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { XCircle, PlusCircle } from 'lucide-react';
@@ -54,18 +54,18 @@ const PostGig: React.FC = () => {
         console.log('Transaction confirmed. Receipt:', receipt);
         
         // Get the GigPosted event signature
-        const gigPostedEventAbi = contractABI.find(
+        const gigPostedEventAbi = gigEscrowABI.find(
           (item) => item.type === 'event' && item.name === 'GigPosted'
         );
 
         if (!gigPostedEventAbi) {
-          console.error('ABI definition for GigPosted event not found!', contractABI);
-          throw new Error("ABI definition for GigPosted event not found in provided contractABI.");
+          console.error('ABI definition for GigPosted event not found!', gigEscrowABI);
+          throw new Error("ABI definition for GigPosted event not found in provided gigEscrowABI.");
         }
 
         console.log('Attempting to find GigPosted event in logs:', receipt.logs);
         console.log('Using ABI definition:', gigPostedEventAbi);
-        console.log('Expected contract address:', contractAddress);
+        console.log('Expected contract address:', gigEscrowAddress);
 
         // Try to extract gigId from transaction events directly
         let gigId = null;
@@ -74,7 +74,7 @@ const PostGig: React.FC = () => {
         try {
           for (const log of receipt.logs) {
             // Check if log is from our contract
-            if (log.address.toLowerCase() === contractAddress.toLowerCase()) {
+            if (log.address.toLowerCase() === gigEscrowAddress.toLowerCase()) {
               try {
                 const decoded = decodeEventLog({
                   abi: [gigPostedEventAbi],
@@ -128,7 +128,7 @@ const PostGig: React.FC = () => {
         setBackendSaveResult('error');
       }
     }
-  }, [isConfirmed, receipt, accountAddress, isBackendLoading, extractedGigId, backendSaveResult, contractABI, toast, transactionData]);
+  }, [isConfirmed, receipt, accountAddress, isBackendLoading, extractedGigId, backendSaveResult, gigEscrowABI, toast, transactionData]);
 
   const handleBackendSave = async (gigId: string) => {
     if (!accountAddress || !transactionData) {
@@ -146,7 +146,7 @@ const PostGig: React.FC = () => {
         description: transactionData.description || "No description provided", // Ensure non-empty description
         budget: transactionData.totalAmount || "0", // Ensure non-empty budget
         contractGigId: gigId, // Ensure this is a string
-        escrowContractAddress: contractAddress,
+        escrowContractAddress: gigEscrowAddress,
       };
       
       console.log('Calling backend API with payload:', payload);
@@ -285,8 +285,8 @@ const PostGig: React.FC = () => {
       setBackendSaveResult(null);
 
       writeContract({
-        address: contractAddress as `0x${string}`,
-        abi: contractABI,
+        address: gigEscrowAddress as `0x${string}`,
+        abi: gigEscrowABI,
         functionName: 'postGig',
         args: [ZERO_ADDRESS, description, descs, valuesWei],
         value: totalWei.toString(),

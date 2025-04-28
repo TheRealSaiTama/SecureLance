@@ -1,24 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAuth } from '@/contexts/AuthContext';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount, useSignMessage, useEnsName } from 'wagmi';
-import { toast } from 'sonner';
-import axios from 'axios';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/AuthContext";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useSignMessage, useEnsName } from "wagmi";
+import { toast } from "sonner";
+import axios from "axios";
+import { motion, AnimatePresence, useAnimation } from "framer-motion";
+import { Loader2 } from "lucide-react";
 const formSchema = z.object({
-  username: z.string().min(3, {
-    message: "Username must be at least 3 characters.",
-  }).optional(),
+  username: z
+    .string()
+    .min(3, {
+      message: "Username must be at least 3 characters.",
+    })
+    .optional(),
 });
 const Auth = () => {
   const navigate = useNavigate();
@@ -40,46 +61,78 @@ const Auth = () => {
     if (ensName && !form.getValues("username")) {
       form.setValue("username", ensName);
     } else if (address && !form.getValues("username") && !ensName) {
+      // This block was empty, adding a comment or placeholder logic if needed
     }
   }, [address, ensName, form]);
   useEffect(() => {
     (async () => {
-      await pageControls.start({ opacity: 1, scale: 1, transition: { duration: 0.7, ease: 'easeOut' } });
+      await pageControls.start({
+        opacity: 1,
+        scale: 1,
+        transition: { duration: 0.7, ease: "easeOut" },
+      });
       setShowText(true);
-      await textControls.start(i => ({
+      await textControls.start((i) => ({
         opacity: 1,
         y: 0,
-        transition: { duration: 0.7, delay: i * 0.25, type: 'spring', stiffness: 120, damping: 12 }
+        transition: {
+          duration: 0.7,
+          delay: i * 0.25,
+          type: "spring",
+          stiffness: 120,
+          damping: 12,
+        },
       }));
     })();
   }, [pageControls, textControls]);
   const handleSignIn = async (values: z.infer<typeof formSchema>) => {
     if (!isConnected || !address) {
-      toast.error('Please connect your wallet first.');
+      toast.error("Please connect your wallet first.");
       return;
     }
     setIsLoading(true);
     try {
-      const nonceResponse = await axios.get(`http://localhost:5002/api/v1/auth/nonce/${address}`);
+      const nonceResponse = await axios.get(
+        `http://localhost:5002/api/v1/auth/nonce/${address}`
+      );
       const nonce = nonceResponse.data.nonce;
-      if (!nonce) throw new Error('Failed to retrieve nonce from server.');
+      if (!nonce) throw new Error("Failed to retrieve nonce from server.");
       const messageToSign = `Welcome to SecureLance! Sign this message to log in. Nonce: ${nonce}`;
-      const signature = await signMessageAsync({ account: address, message: messageToSign });
-      const verifyResponse = await axios.post('http://localhost:5002/api/v1/auth/verify', {
-        address,
-        signature,
-        username: values.username || ensName || undefined,
+      const signature = await signMessageAsync({
+        account: address,
+        message: messageToSign,
       });
+      const verifyResponse = await axios.post(
+        "http://localhost:5002/api/v1/auth/verify",
+        {
+          address,
+          signature,
+          username: values.username || ensName || undefined,
+        }
+      );
       const { token, ...userData } = verifyResponse.data;
-      if (!token || !userData) throw new Error('Invalid response from verification server.');
+      if (!token || !userData)
+        throw new Error("Invalid response from verification server.");
       login(userData, token);
-      toast.success('Successfully signed in!');
-      navigate('/dashboard');
-    } catch (error: any) {
-      console.error('Sign-in error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Sign-in failed.';
-      if (errorMessage.includes('User rejected')) {
-        toast.error('Signature request rejected.');
+      toast.success("Successfully signed in!");
+      navigate("/dashboard");
+    } catch (error: unknown) {
+      // Changed 'any' to 'unknown'
+      console.error("Sign-in error:", error);
+      // Improved error handling
+      let errorMessage = "Sign-in failed.";
+      if (axios.isAxiosError(error)) {
+        errorMessage =
+          error.response?.data?.message || error.message || errorMessage;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      if (
+        typeof errorMessage === "string" &&
+        errorMessage.includes("User rejected")
+      ) {
+        toast.error("Signature request rejected.");
       } else {
         toast.error(errorMessage);
       }
@@ -106,8 +159,13 @@ const Auth = () => {
         {}
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
           {}
-          <h2 className="text-3xl md:text-4xl font-bold text-white drop-shadow-glow-primary mb-5">Welcome to SecureLance</h2>
-          <p className="text-lg text-white/80 max-w-md mx-auto mb-3">A Web3 freelance platform where trust is built into every interaction.</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-white drop-shadow-glow-primary mb-5">
+            Welcome to SecureLance
+          </h2>
+          <p className="text-lg text-white/80 max-w-md mx-auto mb-3">
+            A Web3 freelance platform where trust is built into every
+            interaction.
+          </p>
         </div>
       </div>
       {}
@@ -121,29 +179,37 @@ const Auth = () => {
             <Card className="w-full shadow-xl border-border/30 backdrop-blur-sm bg-background/95">
               <CardHeader className="space-y-2 text-center pb-6 pt-8">
                 <div className="flex justify-center mb-4">
-                  <img src="/logo.png" alt="SecureLance Logo" className="h-400 w-auto" />
+                  <img
+                    src="/logo.png"
+                    alt="SecureLance Logo"
+                    className="h-400 w-auto"
+                  />
                 </div>
                 <div className="flex justify-center mb-6">
-                  <ConnectButton 
-                    accountStatus="address" 
-                    showBalance={false} 
+                  <ConnectButton
+                    accountStatus="address"
+                    showBalance={false}
                     chainStatus="none"
                   />
                 </div>
                 <CardTitle className="text-2xl bg-gradient-to-r from-web3-primary to-web3-secondary inline-block text-transparent bg-clip-text drop-shadow-glow-primary min-h-[2.5em]">
-                  <AnimatedWords words={["Independent", "FreeLance", "Secure"]} />
+                  <AnimatedWords
+                    words={["Independent", "FreeLance", "Secure"]}
+                  />
                 </CardTitle>
                 <CardDescription>
-                  {isConnected 
+                  {isConnected
                     ? "Verify wallet ownership to sign in or create your account."
-                    : "Connect your wallet to get started."
-                  }
+                    : "Connect your wallet to get started."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="pb-6">
                 {isConnected && (
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit(handleSignIn)} className="space-y-6">
+                    <form
+                      onSubmit={form.handleSubmit(handleSignIn)}
+                      className="space-y-6"
+                    >
                       <FormField
                         control={form.control}
                         name="username"
@@ -151,7 +217,14 @@ const Auth = () => {
                           <FormItem>
                             <FormLabel>Username (Optional)</FormLabel>
                             <FormControl>
-                              <Input placeholder={ensName ? `e.g., ${ensName}` : "Choose a display name"} {...field} />
+                              <Input
+                                placeholder={
+                                  ensName
+                                    ? `e.g., ${ensName}`
+                                    : "Choose a display name"
+                                }
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -160,24 +233,28 @@ const Auth = () => {
                       <div className="pt-4 space-y-2">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button 
-                              type="submit" 
-                              className="w-full glow-btn"
-                              disabled={isLoading || !isConnected}
-                            >
+                            <Button type="submit" className="w-full glow-btn">
                               {isLoading ? (
-                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                                  Verifying...
+                                </>
                               ) : (
-                                'Sign In / Sign Up'
+                                "Sign In / Sign Up"
                               )}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Sign a message with your wallet to prove ownership. <br/>This is secure and does not cost gas.</p>
+                            <p>
+                              Sign a message with your wallet to prove
+                              ownership. <br />
+                              This is secure and does not cost gas.
+                            </p>
                           </TooltipContent>
                         </Tooltip>
                         <p className="text-xs text-center text-muted-foreground px-4">
-                          Signing proves you own this wallet, enabling secure, passwordless access.
+                          Signing proves you own this wallet, enabling secure,
+                          passwordless access.
                         </p>
                       </div>
                     </form>
@@ -201,7 +278,8 @@ const Auth = () => {
                   </div>
                 </div>
                 <p className="text-center text-sm text-muted-foreground px-4">
-                  By using SecureLance, you agree to our Terms of Service and Privacy Policy
+                  By using SecureLance, you agree to our Terms of Service and
+                  Privacy Policy
                 </p>
               </CardFooter>
             </Card>
@@ -236,23 +314,25 @@ const AnimatedWords = ({ words }: { words: string[] }) => {
               opacity: 1,
               y: 0,
               scale: 1.08,
-              color: '#9b87f5',
+              color: "#9b87f5",
               transition: {
-                type: 'tween',
+                type: "tween",
                 duration: 0.45,
-                ease: 'easeOut',
+                ease: "easeOut",
               },
             },
           }}
-          style={{ 
-            display: 'inline-block', 
-            marginRight: idx < words.length - 1 ? '12px' : 0,
-            paddingRight: idx < words.length - 1 ? '4px' : 0
+          style={{
+            display: "inline-block",
+            marginRight: idx < words.length - 1 ? "12px" : 0,
+            paddingRight: idx < words.length - 1 ? "4px" : 0,
           }}
           className="font-bold text-xl md:text-xl lg:text-xl tracking-tight"
         >
           {word}
-          {idx < words.length - 1 && <span className="text-web3-primary ml-1">.</span>}
+          {idx < words.length - 1 && (
+            <span className="text-web3-primary ml-1">.</span>
+          )}
         </motion.span>
       ))}
     </motion.span>

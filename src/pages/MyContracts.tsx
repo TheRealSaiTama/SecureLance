@@ -12,14 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Clock, ArrowRight, Calendar, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Clock, ArrowRight, Calendar, FileText, CheckCircle, AlertCircle, Loader2, Users } from 'lucide-react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi';
 import { useToast } from "@/hooks/use-toast";
 import axios from 'axios';
 import { formatEther } from 'viem';
-import { contractAddress, contractABI } from '@/config/contractConfig';
+import { gigEscrowAddress, gigEscrowABI } from '@/config/contractConfig';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Milestone {
   id: string;
@@ -264,8 +265,8 @@ const MyContracts = () => {
     }
     setReleasingPaymentGig({ gigId });
     const contractArgs = {
-      address: contractAddress as `0x${string}`,
-      abi: contractABI,
+      address: gigEscrowAddress as `0x${string}`,
+      abi: gigEscrowABI,
       functionName: 'releaseFunds',
       args: [
           BigInt(contractGigId)
@@ -332,8 +333,8 @@ const MyContracts = () => {
   }, [isConfirming, isConfirmed, writeError, releasingPaymentGig, addNotification, toast, hash]);
 
   useWatchContractEvent({
-    address: contractAddress as `0x${string}`,
-    abi: contractABI,
+    address: gigEscrowAddress as `0x${string}`,
+    abi: gigEscrowABI,
     eventName: 'MilestonePaymentReleased',
     onLogs(logs) {
     },
@@ -490,6 +491,50 @@ const ActiveContractCard = ({
   const otherPartyAddress = viewMode === 'client' ? gig.freelancerAddress : gig.clientAddress;
   const { data: milestoneHash, error: milestoneError, isLoading: isMilestonePending, writeContract: writeRelease } = useWriteContract();
   const { isLoading: isMilestoneConfirming, isSuccess: isMilestoneSuccess } = useWaitForTransactionReceipt({ hash: milestoneHash });
+  const [workspaceUrl, setWorkspaceUrl] = useState<string | null>(null);
+  const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002';
+  const { token } = useAuth();
+
+  const getCollaborativeWorkspace = async () => {
+    if (!gig.contractGigId) return;
+    
+    setIsLoadingWorkspace(true);
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/api/v1/gigs/${gig.contractGigId}/workspace?escrowContractAddress=${gig.escrowContractAddress}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      
+      setWorkspaceUrl(response.data.collaborativeWorkspaceUrl);
+      toast({ 
+        title: 'Collaborative Workspace Ready', 
+        description: 'You can now collaborate on documents and designs securely.',
+        variant: 'success'
+      });
+    } catch (error: any) {
+      console.error('Error accessing collaborative workspace:', error);
+      toast({ 
+        title: 'Error Accessing Workspace', 
+        description: error.response?.data?.message || 'Could not access the collaborative workspace.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoadingWorkspace(false);
+    }
+  };
+
+  const openCollaborativeWorkspace = () => {
+    if (workspaceUrl) {
+      window.open(workspaceUrl, '_blank');
+    } else {
+      getCollaborativeWorkspace();
+    }
+  };
 
   useEffect(() => {
     if (isMilestonePending) {
@@ -575,8 +620,8 @@ const ActiveContractCard = ({
                         variant="default"
                         onClick={() => {
                           writeRelease({
-                            address: contractAddress as `0x${string}`,
-                            abi: contractABI,
+                            address: gigEscrowAddress as `0x${string}`,
+                            abi: gigEscrowABI,
                             functionName: 'releaseMilestonePayment',
                             args: [BigInt(gig.contractGigId), BigInt(index)],
                           });
@@ -605,7 +650,23 @@ const ActiveContractCard = ({
         )}
       </CardContent>
       <CardFooter className="flex justify-between border-t pt-4 pb-3">
-        <Button variant="outline">View Details</Button>
+        <div className="flex space-x-2">
+          <Button variant="outline">View Details</Button>
+          {gig.status === 'InProgress' && (
+            <Button 
+              variant="outline" 
+              className="bg-blue-500/10 text-blue-600 border-blue-300 hover:bg-blue-500/20"
+              onClick={openCollaborativeWorkspace}
+              disabled={isLoadingWorkspace}
+            >
+              {isLoadingWorkspace ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading Workspace</>
+              ) : (
+                <><Users className="mr-2 h-4 w-4" />Collaborative Workspace</>
+              )}
+            </Button>
+          )}
+        </div>
         {gig.status === 'InProgress' && viewMode === 'freelancer' && (
             <Dialog>
               <DialogTrigger asChild>

@@ -201,7 +201,8 @@ const Dashboard = () => {
            <TechLogos />
         </motion.div>
       </div>
-      {}
+      
+      {/* Restore the link animation with social media links */}
       <div className="fixed bottom-6 right-6 z-50">
         <motion.div
           className="relative w-20 h-20 md:w-20 md:h-17 rounded-full overflow-hidden shadow-lg cursor-pointer border-2 border-primary/70 shadow-[0_0_15px_2px_rgba(155,135,245,0.6)] hover:scale-110 transition-transform duration-300"
@@ -218,7 +219,7 @@ const Dashboard = () => {
             className="absolute top-0 left-0 w-full h-full object-cover"
           />
         </motion.div>
-        {}
+        
         <AnimatePresence>
           {showSocials && (
             <motion.div
@@ -254,6 +255,7 @@ const Dashboard = () => {
           )}
         </AnimatePresence>
       </div>
+      
     </div>
   );
 };

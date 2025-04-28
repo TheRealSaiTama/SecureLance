@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { ethers } from 'ethers';
+import { ethers, formatEther } from 'ethers'; // Import formatEther directly
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,6 +16,9 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
+import { BadgeDisplay } from '@/components/ui/badge-display';
+import { gigEscrowABI, gigEscrowAddress, reputationBadgeABI, reputationBadgeAddress } from '@/config/contractConfig';
+import { BrowserProvider, Contract } from 'ethers';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002';
 
@@ -30,77 +33,109 @@ const trustScoreData = [
   { month: 'Aug', score: 95 },
   { month: 'Sep', score: 96 },
   { month: 'Oct', score: 97 },
+  { month: 'Nov', score: 98 },
+  { month: 'Dec', score: 99 },
 ];
+
 const badges = [
-  {
-    id: 1,
-    name: 'On-Time Master',
-    description: 'Always delivers work on schedule',
-    icon: Clock,
-    color: 'bg-web3-blue/20 text-web3-blue border-web3-blue/30'
+  { 
+    id: '1', 
+    name: 'Trusted Professional', 
+    description: 'Awarded for consistently delivering high-quality work',
+    icon: Award,
+    color: 'bg-blue-500 text-blue-500 border-blue-300/50'
   },
-  {
-    id: 2,
-    name: 'Quality Craftsman',
-    description: 'Consistently high-quality deliverables',
-    icon: CheckCheck,
-    color: 'bg-green-500/20 text-green-500 border-green-500/30'
-  },
-  {
-    id: 3,
-    name: 'Communication Pro',
-    description: 'Outstanding client communication',
+  { 
+    id: '2', 
+    name: 'Communication Star', 
+    description: 'Exceptional client communication skills',
     icon: MessageSquare,
-    color: 'bg-web3-primary/20 text-web3-primary border-web3-primary/30'
+    color: 'bg-purple-500 text-purple-500 border-purple-300/50'
   },
-  {
-    id: 4,
-    name: 'Top Earner',
-    description: 'Among top 10% of platform earners',
-    icon: Wallet,
-    color: 'bg-amber-500/20 text-amber-500 border-amber-500/30'
+  { 
+    id: '3', 
+    name: 'Deadline Master', 
+    description: 'Always completes projects on time',
+    icon: Clock,
+    color: 'bg-green-500 text-green-500 border-green-300/50'
+  },
+  { 
+    id: '4', 
+    name: 'Quality Expert', 
+    description: 'Consistently achieves high ratings for quality',
+    icon: CheckCheck,
+    color: 'bg-yellow-500 text-yellow-500 border-yellow-300/50'
   },
 ];
+
 const feedback = [
-  {
-    id: 1,
-    client: '0x1a2b...3c4d',
-    project: 'DeFi Dashboard',
-    rating: 5,
-    comment: 'Exceptional work! The dashboard exceeded our expectations with its intuitive design and seamless Web3 integration.',
-    date: '2025-04-15'
-  },
-  {
-    id: 2,
-    client: '0x5e6f...7g8h',
-    project: 'NFT Marketplace',
-    rating: 5,
-    comment: 'Amazing attention to detail. Really understood our vision and delivered a polished product.',
-    date: '2025-03-28'
-  },
-  {
-    id: 3,
-    client: '0x9i0j...1k2l',
-    project: 'Smart Contract Audit',
-    rating: 4,
-    comment: 'Thorough review that identified several critical issues. Very professional work.',
-    date: '2025-03-10'
-  },
+  { id: '1', project: 'DeFi Dashboard UI', client: 'Ethereum Labs', rating: 5, comment: 'Excellent work and communication throughout the project.', date: '2 weeks ago' },
+  { id: '2', project: 'NFT Marketplace Integration', client: 'CryptoArt Inc', rating: 5, comment: 'Delivered ahead of schedule with exceptional quality.', date: '1 month ago' },
+  { id: '3', project: 'Smart Contract Audit', client: 'SecureChain', rating: 4, comment: 'Very thorough analysis and clear reporting.', date: '2 months ago' },
 ];
-export const Reputation = () => {
+
+const Reputation = () => {
   const { address, isConnected } = useAccount();
   const { token } = useAuth();
-  const [completedGigs, setCompletedGigs] = useState<number | null>(null);
-  const [totalEarned, setTotalEarned] = useState<string | null>(null);
+  const [completedGigs, setCompletedGigs] = useState(null);
+  const [totalEarned, setTotalEarned] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
+  const [provider, setProvider] = useState(null);
+  const [badgeContract, setBadgeContract] = useState(null);
+  const [gigEscrowContract, setGigEscrowContract] = useState(null);
+
+  useEffect(() => {
+    // Initialize provider and contracts when address is available
+    if (window.ethereum && isConnected) {
+      try {
+        const web3Provider = new BrowserProvider(window.ethereum);
+        setProvider(web3Provider);
+
+        // Defensive check for gigEscrowABI
+        if (!Array.isArray(gigEscrowABI) || gigEscrowABI.length === 0) {
+          console.error("GigEscrow ABI is not loaded or is invalid.", gigEscrowABI);
+          setError("Failed to load GigEscrow contract interface. Please refresh.");
+          return; // Prevent contract instantiation with invalid ABI
+        }
+        const escrowContract = new Contract(
+          gigEscrowAddress,
+          gigEscrowABI,
+          web3Provider
+        );
+        setGigEscrowContract(escrowContract);
+
+        // Defensive check for reputationBadgeABI
+        if (!Array.isArray(reputationBadgeABI) || reputationBadgeABI.length === 0) {
+          console.error("ReputationBadge ABI is not loaded or is invalid.", reputationBadgeABI);
+          setError("Failed to load Reputation Badge contract interface. Please refresh.");
+          return; // Prevent contract instantiation with invalid ABI
+        }
+        const nftContract = new Contract(
+          reputationBadgeAddress,
+          reputationBadgeABI,
+          web3Provider
+        );
+        setBadgeContract(nftContract);
+        setError(null); // Clear any previous errors if successful
+      } catch (e) {
+        console.error("Error initializing contracts:", e);
+        setError("Error setting up contracts. Please ensure your wallet is connected correctly and refresh.");
+      }
+    } else {
+      // Clear contracts if not connected or no provider
+      setProvider(null);
+      setGigEscrowContract(null);
+      setBadgeContract(null);
+    }
+  }, [isConnected, address]);
 
   useEffect(() => {
     if (!isConnected || !address || !token) {
       setCompletedGigs(null);
       setTotalEarned(null);
-      setError(null);
       setIsLoading(false);
+      setError(null);
       return;
     }
     setIsLoading(true);
@@ -110,9 +145,9 @@ export const Reputation = () => {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         const data = await res.json();
         setCompletedGigs(data.completedGigs || 0);
-        setTotalEarned(ethers.formatEther(data.totalEarned || '0'));
+        setTotalEarned(formatEther(data.totalEarned || '0')); // Use formatEther directly
         setError(null);
-      } catch (e: any) {
+      } catch (e) {
         console.error('Error fetching reputation:', e);
         setError('Failed to fetch reputation data.');
         setCompletedGigs(null);
@@ -126,6 +161,7 @@ export const Reputation = () => {
   return (
     <div className="animate-fade-in">
       <h1 className="text-2xl font-bold mb-6">My Reputation Profile</h1>
+      
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <TrustScoreCard 
           completedGigs={completedGigs}
@@ -138,12 +174,15 @@ export const Reputation = () => {
           <TrustScoreChart data={trustScoreData} /> 
         </div>
       </div>
+      
       <Tabs defaultValue="badges" className="mb-8">
         <TabsList>
           <TabsTrigger value="badges">Badges & Achievements</TabsTrigger>
+          <TabsTrigger value="nftBadges">Dynamic NFT Badges</TabsTrigger>
           <TabsTrigger value="ratings">Client Feedback</TabsTrigger>
           <TabsTrigger value="metrics">Performance Metrics</TabsTrigger>
         </TabsList>
+        
         <TabsContent value="badges" className="mt-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {badges.map((badge) => (
@@ -151,6 +190,16 @@ export const Reputation = () => {
             ))}
           </div>
         </TabsContent>
+        
+        <TabsContent value="nftBadges" className="mt-6">
+          <BadgeDisplay 
+            address={address}
+            provider={provider}
+            badgeContract={badgeContract}
+            gigEscrowContract={gigEscrowContract}
+          />
+        </TabsContent>
+        
         <TabsContent value="ratings" className="mt-6">
           <div className="space-y-6">
             {feedback.map((item) => (
@@ -158,6 +207,7 @@ export const Reputation = () => {
             ))}
           </div>
         </TabsContent>
+        
         <TabsContent value="metrics" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <MetricCard 
@@ -187,41 +237,51 @@ export const Reputation = () => {
   );
 };
 
-const TrustScoreCard = ({ completedGigs, totalEarned, isLoading, error, isConnected }: {
-  completedGigs: number | null;
-  totalEarned: string | null;
-  isLoading: boolean;
-  error: string | null;
-  isConnected: boolean;
-}) => {
+const TrustScoreCard = ({ completedGigs, totalEarned, isLoading, error, isConnected }) => {
   return (
-    <Card className="glow-border bg-card animate-pulse-glow">
+    <Card className="bg-card">
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg">My Reputation</CardTitle>
-        <CardDescription>Based on completed gigs</CardDescription>
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-lg">Trust Score</CardTitle>
+          <div className="bg-primary/20 p-2 rounded-full">
+            <Wallet className="h-4 w-4 text-primary" />
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col items-center justify-center min-h-[100px]">
-          {isLoading ? (
-            <Loader2 className="h-8 w-8 animate-spin text-web3-primary" />
-          ) : error ? (
-            <p className="text-red-500 text-sm text-center">{error}</p>
-          ) : !isConnected ? (
-            <p className="text-muted-foreground text-sm text-center">Connect wallet to view reputation</p>
-          ) : (completedGigs !== null && totalEarned !== null) ? (
-            <>
-              <div className="text-center mb-2">
-                <div className="text-3xl font-bold text-web3-primary">{completedGigs}</div>
-                <div className="text-xs text-muted-foreground">Gigs Completed</div>
+        <div className="flex flex-col gap-6">
+          <div className="text-center">
+            {isLoading ? (
+              <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+            ) : !isConnected ? (
+              <div className="text-sm text-muted-foreground">
+                Connect wallet to view your score
               </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-web3-primary">{totalEarned} ETH</div>
-                <div className="text-xs text-muted-foreground">Total Earned</div>
-              </div>
-            </>
-          ) : (
-            <p className="text-muted-foreground text-sm text-center">No reputation data found for this address.</p>
-          )}
+            ) : error ? (
+              <div className="text-sm text-red-500">{error}</div>
+            ) : (
+              <>
+                <div className="text-5xl font-bold text-primary mb-1">96%</div>
+                <div className="flex justify-center gap-1">
+                  <RatingStar filled={true} />
+                  <RatingStar filled={true} />
+                  <RatingStar filled={true} />
+                  <RatingStar filled={true} />
+                  <RatingStar filled={true} />
+                </div>
+              </>
+            )}
+          </div>
+          <div>
+            <div className="text-sm font-medium mb-1 flex justify-between">
+              <span>Completed Gigs</span>
+              <span>{isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : completedGigs !== null ? completedGigs : "N/A"}</span>
+            </div>
+            <div className="text-sm font-medium mb-1 flex justify-between">
+              <span>Total Earned</span>
+              <span>{isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : totalEarned !== null ? `${totalEarned} ETH` : "N/A"}</span>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -243,6 +303,7 @@ const RatingStar = ({ filled }: { filled: boolean }) => (
     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
   </svg>
 );
+
 const TrustScoreChart = ({ data }: { data: any[] }) => {
   return (
     <Card className="bg-card">
@@ -292,6 +353,7 @@ const TrustScoreChart = ({ data }: { data: any[] }) => {
     </Card>
   );
 };
+
 const BadgeCard = ({ badge }: { badge: any }) => {
   return (
     <Card className="bg-card">
@@ -309,6 +371,7 @@ const BadgeCard = ({ badge }: { badge: any }) => {
     </Card>
   );
 };
+
 const FeedbackCard = ({ feedback }: { feedback: any }) => {
   return (
     <Card className="bg-card">
@@ -332,6 +395,7 @@ const FeedbackCard = ({ feedback }: { feedback: any }) => {
     </Card>
   );
 };
+
 const MetricCard = ({ title, value, description }: { title: string, value: number, description: string }) => {
   return (
     <Card className="bg-card">
@@ -350,4 +414,5 @@ const MetricCard = ({ title, value, description }: { title: string, value: numbe
     </Card>
   );
 };
+
 export default Reputation;

@@ -2,11 +2,15 @@ import React, { createContext, useState, useContext, useEffect, ReactNode } from
 import { toast } from 'sonner';
 import { jwtDecode } from "jwt-decode"; 
 import axios from 'axios'; 
+import { ethers } from 'ethers';
+import { gigEscrowABI, gigEscrowAddress } from '@/config/contractConfig';
+
 type User = {
   id: string; 
   address: string;
   username: string;
 };
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -15,12 +19,16 @@ interface AuthContextType {
   login: (userData: User, token: string) => void;
   logout: () => void;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  mintInitiativeBadge: () => Promise<void>;
 }
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('jwtToken')); 
   const [isLoading, setIsLoading] = useState(true);
+
   useEffect(() => {
     const initializeAuth = async () => {
       const storedToken = localStorage.getItem('jwtToken');
@@ -28,63 +36,93 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
           const decodedToken: { id: string; exp: number } = jwtDecode(storedToken);
           if (decodedToken.exp * 1000 < Date.now()) {
-            console.log("Token expired, logging out.");
-            logout(); 
+            // Token expired
+            localStorage.removeItem('jwtToken');
+            setToken(null);
+            setUser(null);
           } else {
-            console.log("Token valid, setting user state.");
-            const storedUser = localStorage.getItem('user');
-            if (storedUser) {
-              setUser(JSON.parse(storedUser));
-            } else {
-              console.warn("Token found but user data missing from localStorage.");
-              logout(); 
+            // Valid token, fetch user data
+            try {
+              const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002'}/api/v1/auth/profile`, { 
+                headers: { Authorization: `Bearer ${storedToken}` } 
+              });
+              setUser(response.data);
+              setToken(storedToken);
+            } catch (error) {
+              console.error('Error fetching user profile:', error);
+              localStorage.removeItem('jwtToken');
+              setToken(null);
+              setUser(null);
             }
-            setToken(storedToken);
           }
         } catch (error) {
-          console.error("Error decoding token:", error);
-          logout(); 
+          console.error('Invalid token:', error);
+          localStorage.removeItem('jwtToken');
+          setToken(null);
+          setUser(null);
         }
       } else {
-        console.log("No token found.");
+        setUser(null);
+        setToken(null);
       }
       setIsLoading(false);
     };
+
     initializeAuth();
   }, []);
-  const login = (userData: User, receivedToken: string) => {
-    console.log("Logging in user:", userData);
-    console.log("Received token:", receivedToken);
+
+  const login = (userData: User, newToken: string) => {
+    localStorage.setItem('jwtToken', newToken);
+    setToken(newToken);
     setUser(userData);
-    setToken(receivedToken);
-    localStorage.setItem('jwtToken', receivedToken);
-    localStorage.setItem('user', JSON.stringify(userData)); 
+    
+    // Mint initiative badge when user logs in
+    mintInitiativeBadge();
   };
+
   const logout = () => {
-    console.log("Logging out user.");
-    setUser(null);
-    setToken(null);
     localStorage.removeItem('jwtToken');
-    localStorage.removeItem('user');
-    toast.info('You have been logged out');
+    setToken(null);
+    setUser(null);
   };
+
+  // Function to mint initiative badge
+  const mintInitiativeBadge = async () => {
+    try {
+      if (!window.ethereum || !user?.address) return;
+      
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      
+      const contract = new ethers.Contract(
+        gigEscrowAddress,
+        gigEscrowABI,
+        signer
+      );
+
+      // Call the connectUser function to grant initiative badge
+      const tx = await contract.connectUser(user.address);
+      await tx.wait();
+      
+      toast({
+        title: "Welcome Badge Granted!",
+        description: "You've received an Initiative badge for joining SecureLance.",
+      });
+    } catch (error) {
+      console.error("Error minting initiative badge:", error);
+      // Don't show error toast as this should be a background operation
+      // User will still see their badge in the UI when it's available
+    }
+  };
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isAuthenticated: !!token, 
-        isLoading,
-        login,
-        logout,
-        setUser, 
-      }}
-    >
+    <AuthContext.Provider value={{ user, token, isAuthenticated: !!user, isLoading, login, logout, setUser, mintInitiativeBadge }}>
       {children}
     </AuthContext.Provider>
   );
 };
-export const useAuth = (): AuthContextType => {
+
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');

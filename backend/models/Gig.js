@@ -21,7 +21,7 @@ const GigSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Open', 'InProgress', 'Completed', 'Cancelled'],
+        enum: ['Open', 'InProgress', 'Completed', 'Cancelled', 'Disputed'],
         default: 'Open',
     },
     contractGigId: {
@@ -33,6 +33,10 @@ const GigSchema = new mongoose.Schema({
         type: String,
         required: true,
         lowercase: true,
+    },
+    collaborativeWorkspaceUrl: {
+        type: String,
+        default: null,
     },
     createdAt: {
         type: Date,

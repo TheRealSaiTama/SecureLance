@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Folder, User, ClipboardCheck, MessageSquare, Star, LayoutDashboard, PlusCircle } from 'lucide-react';
+import { Folder, User, ClipboardCheck, MessageSquare, Star, LayoutDashboard, PlusCircle, Award } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 interface SidebarProps {
@@ -35,6 +35,12 @@ export const Sidebar = ({ collapsed, toggleSidebar }: SidebarProps) => {
       href: '/my-contracts', 
       icon: ClipboardCheck, 
       current: location.pathname === '/my-contracts' 
+    },
+    {
+      name: 'Bounties',
+      href: '/bounties',
+      icon: Award,
+      current: location.pathname.startsWith('/bounties')
     },
     { 
       name: 'Submit Work', 

@@ -15,11 +15,19 @@ import Profile from "./pages/Profile";
 import FAQ from "./pages/FAQ";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
-import PostGig from "./pages/PostGig"; 
+import PostGig from "./pages/PostGig";
+import DisputeDetails from './pages/DisputeDetails';
+
+// Import Bounty pages
+import BountiesPage from "./pages/bounties/BountiesPage";
+import CreateBountyPage from "./pages/bounties/CreateBountyPage";
+import BountyDetailPage from "./pages/bounties/BountyDetailPage";
+
 import { AuthProvider } from "./contexts/AuthContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import React from "react";
+import AiAssistantButton from "@/components/ai/AiAssistantButton";
 
 const App = () => {
   return (
@@ -38,16 +46,23 @@ const App = () => {
                   <Route path="/my-contracts" element={<MyContracts />} />
                   <Route path="/submit-work" element={<SubmitWork />} />
                   <Route path="/reputation" element={<Reputation />} />
-                  <Route path="/profile" element={<Profile />} /> 
+                  <Route path="/profile" element={<Profile />} />
                   <Route path="/faq" element={<FAQ />} />
                   <Route path="/terms" element={<TermsOfService />} />
                   <Route path="/privacy" element={<PrivacyPolicy />} />
                   <Route path="/post-gig" element={<PostGig />} />
+                  <Route path="/disputes/:disputeId" element={<DisputeDetails />} />
+                  
+                  {/* Bounty Routes */}
+                  <Route path="/bounties" element={<BountiesPage />} />
+                  <Route path="/bounties/create" element={<CreateBountyPage />} />
+                  <Route path="/bounties/:id" element={<BountyDetailPage />} />
                 </Route>
               </Route>
 
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <AiAssistantButton />
             <Toaster />
             <Sonner />
           </TooltipProvider>
