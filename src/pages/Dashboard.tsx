@@ -178,7 +178,6 @@ const Dashboard = () => {
         <HowItWorks />
         {}
         <PlatformPerformance />
-        {/** Add Leaderboard section */}
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
@@ -202,7 +201,6 @@ const Dashboard = () => {
         </motion.div>
       </div>
       
-      {/* Restore the link animation with social media links */}
       <div className="fixed bottom-6 right-6 z-50">
         <motion.div
           className="relative w-20 h-20 md:w-20 md:h-17 rounded-full overflow-hidden shadow-lg cursor-pointer border-2 border-primary/70 shadow-[0_0_15px_2px_rgba(155,135,245,0.6)] hover:scale-110 transition-transform duration-300"
@@ -229,9 +227,9 @@ const Dashboard = () => {
               exit={{ opacity: 0, y: 20, transition: { staggerChildren: 0.05, staggerDirection: -1 } }}
             >
               {[ 
-                { Icon: Twitter, href: 'https://twitter.com/securelance', label: 'Twitter' },
-                { Icon: Github, href: 'https://github.com/securelance', label: 'GitHub' },
-                { Icon: Linkedin, href: 'https://linkedin.com/company/securelance', label: 'LinkedIn' }
+                { Icon: Twitter, href: 'https://twitter.com/CodesPasta', label: 'Twitter' },
+                { Icon: Github, href: 'https://github.com/TheRealSaiTama/SecureLance', label: 'GitHub' },
+                { Icon: Linkedin, href: 'https://linkedin.com/therealsaitama', label: 'LinkedIn' }
               ].map(({ Icon, href, label }) => (
                 <motion.a
                   key={label}
