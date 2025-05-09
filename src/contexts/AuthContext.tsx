@@ -9,6 +9,7 @@ type User = {
   id: string; 
   address: string;
   username: string;
+  tokenBalance: number;
 };
 
 interface AuthContextType {
@@ -43,7 +44,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           } else {
             // Valid token, fetch user data
             try {
-              const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002'}/api/v1/auth/profile`, { 
+              const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002'}/api/v1/profile/me`, { 
                 headers: { Authorization: `Bearer ${storedToken}` } 
               });
               setUser(response.data);
@@ -91,8 +92,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       if (!window.ethereum || !user?.address) return;
       
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
+      // Use ethers.BrowserProvider for ethers v6 compatibility
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner(); // getSigner is async
       
       const contract = new ethers.Contract(
         gigEscrowAddress,
@@ -104,8 +106,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const tx = await contract.connectUser(user.address);
       await tx.wait();
       
-      toast({
-        title: "Welcome Badge Granted!",
+      toast.success("Welcome Badge Granted!", {
         description: "You've received an Initiative badge for joining SecureLance.",
       });
     } catch (error) {

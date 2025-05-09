@@ -38,6 +38,10 @@ const GigSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    location: {
+        type: String,
+        default: null,
+    },
     createdAt: {
         type: Date,
         default: Date.now,

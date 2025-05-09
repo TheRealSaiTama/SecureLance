@@ -12,7 +12,7 @@ let gigEscrow = null;
 const initiateDispute = asyncHandler(async (req, res) => {
   const { gigId: contractGigId } = req.params; // Assuming gigId passed is the contractGigId
   const { reason } = req.body;
-  const userAddress = req.user.address; // Assuming protect middleware adds user with address
+  const userAddress = req.user.walletAddress; // Changed from req.user.address
 
   if (!reason) {
     res.status(400);
@@ -60,7 +60,7 @@ const getDisputesForGig = asyncHandler(async (req, res) => {
         const { gigId: contractGigId } = req.params;
         console.log(`Fetching disputes for gig: ${contractGigId}`);
         
-        const userAddress = req.user.address;
+        const userAddress = req.user.walletAddress; // Changed from req.user.address
         console.log(`Request from user: ${userAddress}`);
         
         const gig = await Gig.findOne({ contractGigId });
@@ -92,7 +92,7 @@ const getDisputesForGig = asyncHandler(async (req, res) => {
 
 const getDisputeDetails = asyncHandler(async (req, res) => {
   const { disputeId } = req.params;
-  const userAddress = req.user.address;
+  const userAddress = req.user.walletAddress; // Changed from req.user.address
 
   const dispute = await Dispute.findById(disputeId).populate({
       path: 'gig',
@@ -135,7 +135,7 @@ const submitAISuggestion = asyncHandler(async (req, res) => {
 const castVote = asyncHandler(async (req, res) => {
   const { disputeId } = req.params;
   const { vote } = req.body;
-  const userAddress = req.user.address;
+  const userAddress = req.user.walletAddress; // Changed from req.user.address
 
   const dispute = await Dispute.findById(disputeId);
   if (!dispute) {

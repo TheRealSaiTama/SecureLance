@@ -15,7 +15,7 @@ const stepVariants = {
 };
 export const HowItWorks = () => {
   return (
-    <section className="w-full max-w-6xl">
+    <section className="w-full max-w-6xl how-it-works-section">
       <motion.h2 
         className="text-3xl md:text-4xl font-bold mb-12 text-center text-foreground"
         initial={{ opacity: 0 }}

@@ -11,25 +11,29 @@ import { gigEscrowAddress, gigEscrowABI } from '@/config/contractConfig';
 import axios from 'axios';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { XCircle, PlusCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 const PostGig: React.FC = () => {
   const [description, setDescription] = useState('');
+  const [location, setLocation] = useState('');
   const [milestones, setMilestones] = useState([{ description: '', amount: '' }]);
   const { toast } = useToast();
-  const { address: accountAddress, isConnected } = useAccount();
+  const { address: accountAddress, isConnected, chain } = useAccount();
   const { data: hash, error: writeError, isPending: isWritePending, writeContract } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed, error: confirmationError, data: receipt } = useWaitForTransactionReceipt({ hash });
   const [extractedGigId, setExtractedGigId] = useState<string | null>(null);
   const [isBackendLoading, setIsBackendLoading] = useState(false);
   const [backendSaveResult, setBackendSaveResult] = useState<'success' | 'error' | null>(null);
   const { addNotification } = useNotifications();
+  const { token } = useAuth();
   
   // Store transaction data for backend save
   const [transactionData, setTransactionData] = useState<{
     description: string;
     totalAmount: string;
+    location: string;
   } | null>(null);
 
   const isLoading = isWritePending || isConfirming || isBackendLoading;
@@ -39,6 +43,7 @@ const PostGig: React.FC = () => {
     if (isConfirmed && receipt && backendSaveResult === 'success') {
       setTimeout(() => {
         setDescription('');
+        setLocation('');
         setMilestones([{ description: '', amount: '' }]);
         setExtractedGigId(null);
         setBackendSaveResult(null);
@@ -82,10 +87,21 @@ const PostGig: React.FC = () => {
                   topics: log.topics,
                 });
                 
-                if (decoded && decoded.eventName === 'GigPosted' && decoded.args.gigId) {
+                if (decoded && decoded.eventName === 'GigPosted' && decoded.args) {
                   console.log('Successfully decoded GigPosted event:', decoded);
-                  gigId = decoded.args.gigId.toString();
-                  break;
+                  let gigIdFromArgs: string | undefined = undefined;
+                  if (Array.isArray(decoded.args) && decoded.args[0] !== undefined) {
+                    // If args is an array, assume gigId is the first element
+                    gigIdFromArgs = decoded.args[0].toString();
+                  } else if (typeof decoded.args === 'object' && decoded.args !== null && 'gigId' in decoded.args && (decoded.args as any).gigId !== undefined) {
+                    // If args is an object, access gigId directly
+                    gigIdFromArgs = (decoded.args as any).gigId.toString();
+                  }
+
+                  if (gigIdFromArgs) {
+                    gigId = gigIdFromArgs;
+                    break;
+                  }
                 }
               } catch (decodeError) {
                 console.log('Error decoding log, trying next one:', decodeError);
@@ -123,7 +139,7 @@ const PostGig: React.FC = () => {
         toast({
           title: "Error Processing Transaction",
           description: `Transaction confirmed on-chain, but failed to process event: ${error.message}. Your gig may still be valid on the blockchain.`,
-          variant: "warning"
+          variant: "default"
         });
         setBackendSaveResult('error');
       }
@@ -143,10 +159,11 @@ const PostGig: React.FC = () => {
       // Use the saved transaction data and ensure contractGigId is properly formatted
       const payload = {
         clientAddress: accountAddress,
-        description: transactionData.description || "No description provided", // Ensure non-empty description
-        budget: transactionData.totalAmount || "0", // Ensure non-empty budget
-        contractGigId: gigId, // Ensure this is a string
+        description: transactionData.description || "No description provided",
+        budget: transactionData.totalAmount || "0",
+        contractGigId: gigId,
         escrowContractAddress: gigEscrowAddress,
+        location: transactionData.location || "",
       };
       
       console.log('Calling backend API with payload:', payload);
@@ -159,7 +176,11 @@ const PostGig: React.FC = () => {
         }
       });
       
-      const response = await axios.post(`${apiUrl}/api/v1/gigs`, payload);
+      const response = await axios.post(`${apiUrl}/api/v1/gigs`, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       console.log('Backend response:', response.data);
 
       toast({ 
@@ -208,7 +229,7 @@ const PostGig: React.FC = () => {
         toast({
           title: "Backend Warning",
           description: `Gig posted on-chain (Tx: ${hash ? `${hash.substring(0,6)}...` : 'confirmed'}), but metadata wasn't saved: ${backendErrorMessage}`,
-          variant: "warning"
+          variant: "default"
         });
         setBackendSaveResult('error');
       }
@@ -279,6 +300,7 @@ const PostGig: React.FC = () => {
       setTransactionData({
         description: description,
         totalAmount: totalWei.toString(),
+        location: location,
       });
 
       setExtractedGigId(null);
@@ -290,6 +312,8 @@ const PostGig: React.FC = () => {
         functionName: 'postGig',
         args: [ZERO_ADDRESS, description, descs, valuesWei],
         value: totalWei.toString(),
+        account: accountAddress,
+        chain: chain,
       });
 
     } catch (error: any) {
@@ -330,6 +354,16 @@ const PostGig: React.FC = () => {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={5}
+              disabled={isLoading}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="location">Location (e.g., City, Country or Remote)</Label>
+            <Input
+              id="location"
+              placeholder="Enter gig location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
               disabled={isLoading}
             />
           </div>

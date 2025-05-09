@@ -6,13 +6,15 @@ import {
     selectFreelancer,
     completeGig,
     createCollaborativeWorkspace,
+    acceptGig,
 } from '../controllers/gigController.js';
 import { protect } from '../controllers/authController.js';
 
 router.get('/', getGigs);
-router.post('/', createGig);
-router.put('/:contractGigId/select', selectFreelancer);
-router.put('/:contractGigId/complete', completeGig);
+router.post('/', protect, createGig);
+router.put('/:contractGigId/select', protect, selectFreelancer);
+router.put('/:contractGigId/accept', protect, acceptGig);
+router.put('/:contractGigId/complete', protect, completeGig);
 router.get('/:contractGigId/workspace', protect, createCollaborativeWorkspace);
 
 export default router;

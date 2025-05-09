@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Folder, User, ClipboardCheck, MessageSquare, Star, LayoutDashboard, PlusCircle, Award } from 'lucide-react';
+import { Folder, User, ClipboardCheck, MessageSquare, Star, LayoutDashboard, PlusCircle, Award, Globe, ShieldCheck, BookOpen, GraduationCap, Coins } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 interface SidebarProps {
@@ -59,6 +59,24 @@ export const Sidebar = ({ collapsed, toggleSidebar }: SidebarProps) => {
       href: profileHref,
       icon: User, 
       current: location.pathname === '/profile'
+    },
+    {
+      name: 'Gigs Map',
+      href: '/gigs-map',
+      icon: Globe,
+      current: location.pathname === '/gigs-map'
+    },
+    {
+      name: 'Learn',
+      href: '/education',
+      icon: GraduationCap,
+      current: location.pathname === '/education'
+    },
+    {
+      name: 'Tokenomics',
+      href: '/tokenomics',
+      icon: Coins,
+      current: location.pathname === '/tokenomics'
     },
   ];
   return (

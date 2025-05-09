@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, Wallet, ChevronDown, Loader2, Check, Trash2, ExternalLink } from 'lucide-react';
+import { Bell, Wallet, ChevronDown, Loader2, Check, Trash2, ExternalLink, HelpCircle } from 'lucide-react';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -12,10 +12,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useAccount, useBalance } from 'wagmi'; 
+import { useLocation, useNavigate, Link } from 'react-router-dom'; // Import Link
+import { useAccount, useBalance } from 'wagmi';
 import { useNotifications, Notification } from '@/contexts/NotificationContext';
 import { Badge } from '@/components/ui/badge';
+import { useOnboarding } from '@/hooks/use-onboarding';
 
 interface HeaderProps {
   sidebarCollapsed: boolean;
@@ -37,6 +38,7 @@ export const Header = ({ sidebarCollapsed }: HeaderProps) => {
     removeNotification, 
     clearAllNotifications 
   } = useNotifications();
+  const { startTour } = useOnboarding();
 
   const getPageTitle = () => {
     switch (location.pathname) {
@@ -70,7 +72,10 @@ export const Header = ({ sidebarCollapsed }: HeaderProps) => {
     <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-background">
       <div className="flex items-center">
         {sidebarCollapsed && (
-          <h1 className="text-lg font-semibold text-foreground">{getPageTitle()}</h1>
+          <>
+            <h1 className="text-lg font-semibold text-foreground">{getPageTitle()}</h1>
+            {/* <Link to="/about" className="ml-4 text-sm text-muted-foreground">About</Link> */} {/* Add About link */}
+          </>
         )}
       </div>
 
@@ -80,8 +85,8 @@ export const Header = ({ sidebarCollapsed }: HeaderProps) => {
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell className="h-5 w-5" />
                   {unreadCount > 0 && (
-                    <Badge 
-                      variant="web3" 
+                    <Badge
+                      variant="secondary" // Changed variant to "secondary"
                       className="absolute top-0 right-0 w-5 h-5 flex items-center justify-center p-0 text-[10px] font-medium translate-x-1/3 -translate-y-1/3"
                     >
                       {unreadCount > 9 ? '9+' : unreadCount}
@@ -157,11 +162,23 @@ export const Header = ({ sidebarCollapsed }: HeaderProps) => {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Display SLT Balance if user is logged in and tokenBalance is available */}
+            {user && typeof user.tokenBalance === 'number' && (
+              <div className="flex items-center space-x-1 px-2 py-1 bg-muted rounded-md">
+                {/* Replace with an actual token icon if you have one */}
+                {/* <Sparkles className="h-4 w-4 text-amber-500" /> */}
+                <span className="text-sm font-medium">
+                  {user.tokenBalance.toFixed(4)} SLT
+                </span>
+              </div>
+            )}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center space-x-2" disabled={!isConnected}>
                   <Wallet className="h-5 w-5 text-web3-primary" />
                   <span className="text-sm">
+                    {/* This section now ONLY shows ETH balance or connection status */}
                     {isConnected ? (
                       isBalanceLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -170,7 +187,7 @@ export const Header = ({ sidebarCollapsed }: HeaderProps) => {
                           {parseFloat(balanceData.formatted).toFixed(4)} {balanceData.symbol}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">N/A</span>
+                        <span className="text-muted-foreground">N/A ETH</span>
                       )
                     ) : (
                       <span className="text-muted-foreground">Connect Wallet</span>
@@ -184,15 +201,25 @@ export const Header = ({ sidebarCollapsed }: HeaderProps) => {
                   <>
                     <DropdownMenuLabel>{user.username || 'Account'}</DropdownMenuLabel>
                     <DropdownMenuLabel className="text-xs text-muted-foreground truncate">
-                      {user.address}
+                      {/* Display user's wallet address from AuthContext if available, otherwise from wagmi */}
+                      {user?.address || (address ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : 'No address')}
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => window.open(`https://sepolia.etherscan.io/address/${user.address}`, '_blank')}>
+                    <DropdownMenuItem onClick={() => {
+                      const addrToView = user?.address || address;
+                      if (addrToView) {
+                        window.open(`https://sepolia.etherscan.io/address/${addrToView}`, '_blank');
+                      } else {
+                        alert('Wallet address not available.');
+                      }
+                    }}>
                       View on Etherscan
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => {
-                      if (address) { 
-                        navigator.clipboard.writeText(address); 
+                      const addrToCopy = user?.address || address;
+                      if (addrToCopy) { 
+                        navigator.clipboard.writeText(addrToCopy); 
+                        // Consider using a toast notification here instead of alert
                         alert('Address copied to clipboard!');
                       } else {
                         alert('Could not copy address. Wallet not connected or address unavailable.');

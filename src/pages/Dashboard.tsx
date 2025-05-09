@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useMotionValueEvent, useMotionTemplate, useSpring, MotionValue, useMotionValue } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Folder, DollarSign, Users, CheckCircle, HandCoins, Github, Linkedin, Twitter } from 'lucide-react';
+import { ArrowRight, Folder, DollarSign, Users, CheckCircle, HandCoins, Github, Linkedin, Twitter, HelpCircle } from 'lucide-react';
 import Particles from "react-tsparticles";
 import { loadSlim } from "tsparticles-slim";
 import { particlesOptions } from '@/config/particlesConfig';
@@ -14,7 +14,7 @@ import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { HowItWorks } from '@/components/dashboard/HowItWorks';
 import { PlatformPerformance } from '@/components/dashboard/PlatformPerformance';
 import { useAuth } from '@/contexts/AuthContext';
-import { CyclingAnimation } from '@/components/dashboard/CyclingAnimation';
+import Spline from '@splinetool/react-spline';
 import { Leaderboard } from '@/components/dashboard/Leaderboard';
 
 const technologies = [
@@ -45,42 +45,100 @@ const TechLogos = () => (
   </div>
 );
 
-const StatCard = ({ icon: Icon, value, label, prefix = '', suffix = '' }) => (
-  <motion.div 
-    className="bg-card/40 backdrop-blur-md p-6 rounded-xl text-center border border-white/10 shadow-xl transition-all duration-300 hover:border-primary/50 hover:shadow-primary/20 hover:scale-[1.03] group"
-    initial={{ opacity: 0, scale: 0.8 }}
-    animate={{ opacity: 1, scale: 1 }}
-  >
-    <motion.div whileHover={{ scale: 1.1, rotate: 5 }}>
-       <Icon className="h-9 w-9 mx-auto mb-4 text-primary transition-colors duration-300 group-hover:text-white" />
+const StatCard = ({ icon: Icon, value, label, prefix = '', suffix = '' }) => {
+  const cardRef = React.useRef<HTMLDivElement>(null);
+
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+
+  const rotateXMotionValue = useMotionValue(0);
+  const rotateYMotionValue = useMotionValue(0);
+
+  const springConfig = { stiffness: 350, damping: 40, mass: 1.5 };
+  const rotateXSpring = useSpring(rotateXMotionValue, springConfig);
+  const rotateYSpring = useSpring(rotateYMotionValue, springConfig);
+
+  function onMouseMove({ clientX, clientY }) {
+    if (!cardRef.current) return;
+    const { left, top, width, height } = cardRef.current.getBoundingClientRect();
+    const x = clientX - left - width / 2;
+    const y = clientY - top - height / 2;
+
+    rotateXMotionValue.set(y / height * 20);
+    rotateYMotionValue.set(x / width * -20);
+
+    mouseX.set(x);
+    mouseY.set(y);
+  }
+
+  function onMouseLeave() {
+    rotateXMotionValue.set(0);
+    rotateYMotionValue.set(0);
+    mouseX.set(0);
+    mouseY.set(0);
+  }
+
+  const transform = useMotionTemplate`perspective(1000px) rotateX(${rotateXSpring}deg) rotateY(${rotateYSpring}deg)`;
+
+  return (
+    <motion.div 
+      ref={cardRef}
+      className="bg-card/40 backdrop-blur-md p-6 rounded-xl text-center border border-white/10 shadow-xl transition-shadow duration-300 hover:border-primary/50 hover:shadow-primary/20 group"
+      style={{
+        transform: transform,
+        transformStyle: "preserve-3d",
+      }}
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
+    >
+      <motion.div style={{ transform: "translateZ(50px)" }}>
+         <Icon className="h-9 w-9 mx-auto mb-4 text-primary transition-colors duration-300 group-hover:text-white" />
+      </motion.div>
+      <div className="text-4xl font-bold text-foreground mb-1" style={{ transform: "translateZ(40px)" }}>
+        {prefix}
+        <CountUp end={value} />
+        {suffix}
+      </div>
+      <p className="text-sm text-muted-foreground group-hover:text-foreground/80 transition-colors duration-300" style={{ transform: "translateZ(30px)" }}>{label}</p>
     </motion.div>
-    <div className="text-4xl font-bold text-foreground mb-1">
-      {prefix}
-      <CountUp end={value} />
-      {suffix}
-    </div>
-    <p className="text-sm text-muted-foreground group-hover:text-foreground/80 transition-colors duration-300">{label}</p>
-  </motion.div>
-);
+  );
+};
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const [engineLoaded, setEngineLoaded] = useState(true);
+  const [showButton, setShowButton] = useState(false);
   const [showSocials, setShowSocials] = useState(false);
-  const [leftGlowIntensity, setLeftGlowIntensity] = useState(0.15);
+  const { scrollY, scrollYProgress } = useScroll();
+  const [leftGlowIntensity, setLeftGlowIntensity] = useState(0.2);
   const [rightGlowIntensity, setRightGlowIntensity] = useState(0.2);
-  const { scrollYProgress } = useScroll();
+
+  useMotionValueEvent(scrollY, "change", (latest) => {
+    if (latest > 100) {
+      setShowButton(true);
+    } else {
+      setShowButton(false);
+    }
+  });
 
   useMotionValueEvent(scrollYProgress, "change", (latest) => {
-    const leftIntensity = 0.15 + Math.pow(latest, 1.3) * 0.35;
-    setLeftGlowIntensity(Math.min(leftIntensity, 0.5));
-    const rightIntensity = 0.2 + Math.pow(latest, 1.5) * 0.5;
+    const leftIntensity = 0.2 + latest * 0.5;
+    const rightIntensity = 0.2 + (1 - latest) * 0.5;
+    setLeftGlowIntensity(Math.min(leftIntensity, 0.7));
     setRightGlowIntensity(Math.min(rightIntensity, 0.7));
   });
 
-  const particlesContainerLoaded = async (container?: Container): Promise<void> => {
-    console.log("Particles container loaded", container);
-  };
+  const particlesInit = React.useCallback(async (engine: any) => {
+    await loadSlim(engine);
+  }, []);
+
+  const particlesLoaded = React.useCallback(
+    async (container: Container | undefined) => {
+      // console.log(container);
+    },
+    []
+  );
 
   return (
     <div className="dashboard-container relative flex flex-col items-center justify-start min-h-[calc(100vh-4rem)] w-full overflow-clip px-4 pt-20 pb-12">
@@ -108,14 +166,13 @@ const Dashboard = () => {
         }}
       />
       {}
-      {engineLoaded && (
-        <Particles
-          id="tsparticles"
-          options={particlesOptions}
-          loaded={particlesContainerLoaded}
-          className="absolute inset-0 -z-10"
-        />
-      )}
+      <Particles
+        id="tsparticles-dashboard"
+        init={particlesInit}
+        loaded={particlesLoaded}
+        options={particlesOptions as any}
+        className="absolute inset-0 -z-10"
+      />
       {}
       <div className="z-10 flex flex-col items-center w-full space-y-20">
         {}
@@ -142,7 +199,9 @@ const Dashboard = () => {
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mb-10">
             Your gateway to decentralized freelancing. Transparent contracts, reliable escrow, and on-chain reputation.
           </p>
-          <CyclingAnimation />
+          <div className="w-full h-[350px] md:h-[450px] mb-10 flex justify-center items-center">
+             <Spline scene="https://prod.spline.design/S2Vx8PSejWQKR60z/scene.splinecode" />
+          </div>
           <div className="flex flex-col sm:flex-row gap-4">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
               <Button asChild className="glow-btn px-8 py-6 text-lg rounded-lg">
@@ -254,6 +313,23 @@ const Dashboard = () => {
         </AnimatePresence>
       </div>
       
+      <AnimatePresence>
+        {showButton && (
+          <motion.div
+            className="fixed bottom-8 right-8 z-50"
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.5 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+          >
+            <Button asChild size="lg" className="rounded-full shadow-lg bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Link to="/how-to-use" title="How to use SecureLance">
+                <HelpCircle className="mr-2 h-5 w-5" /> How to use
+              </Link>
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -17,6 +17,11 @@ import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import PostGig from "./pages/PostGig";
 import DisputeDetails from './pages/DisputeDetails';
+import HowToUse from "./pages/HowToUse";
+import GigsMapPage from "./pages/GigsMapPage";
+import EducationMarketplacePage from "./pages/EducationMarketplacePage";
+import TopicDetailsPage from "./pages/TopicDetailsPage";
+import TokenomicsPage from "./pages/TokenomicsPage";
 
 // Import Bounty pages
 import BountiesPage from "./pages/bounties/BountiesPage";
@@ -28,6 +33,7 @@ import { NotificationProvider } from "./contexts/NotificationContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import React from "react";
 import AiAssistantButton from "@/components/ai/AiAssistantButton";
+import { OnboardingTour } from "./components/layout/OnboardingTour";
 
 const App = () => {
   return (
@@ -52,6 +58,11 @@ const App = () => {
                   <Route path="/privacy" element={<PrivacyPolicy />} />
                   <Route path="/post-gig" element={<PostGig />} />
                   <Route path="/disputes/:disputeId" element={<DisputeDetails />} />
+                  <Route path="/how-to-use" element={<HowToUse />} />
+                  <Route path="/gigs-map" element={<GigsMapPage />} />
+                  <Route path="/education" element={<EducationMarketplacePage />} />
+                  <Route path="/education/:topicId" element={<TopicDetailsPage />} />
+                  <Route path="/tokenomics" element={<TokenomicsPage />} />
                   
                   {/* Bounty Routes */}
                   <Route path="/bounties" element={<BountiesPage />} />
@@ -63,6 +74,7 @@ const App = () => {
               <Route path="*" element={<NotFound />} />
             </Routes>
             <AiAssistantButton />
+            <OnboardingTour />
             <Toaster />
             <Sonner />
           </TooltipProvider>

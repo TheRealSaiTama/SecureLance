@@ -3,6 +3,8 @@ import User from '../models/User.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import Gig from '../models/Gig.js';
+
 export const getLoggedInUserProfile = async (req, res) => {
   try {
     const user = req.user; 
@@ -15,7 +17,9 @@ export const getLoggedInUserProfile = async (req, res) => {
     res.status(500).json({ message: 'Server error fetching profile', error: error.message });
   }
 };
+
 import mongoose from 'mongoose'; 
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadPath = path.join(process.cwd(), 'backend', 'uploads');
@@ -29,6 +33,7 @@ const storage = multer.diskStorage({
     cb(null, req.user._id + '-' + Date.now() + ext);
   }
 });
+
 export const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
@@ -39,6 +44,7 @@ export const upload = multer({
   },
   limits: { fileSize: 5 * 1024 * 1024 } 
 });
+
 export const getMyProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password -nonce');
@@ -48,6 +54,7 @@ export const getMyProfile = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
 export const updateMyProfile = async (req, res) => {
   try {
     const updates = (({ username, aboutMe, skills, portfolio }) => ({ username, aboutMe, skills, portfolio }))(req.body);
@@ -61,6 +68,7 @@ export const updateMyProfile = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
 export const uploadProfilePhoto = async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
   try {
@@ -71,6 +79,7 @@ export const uploadProfilePhoto = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
 const getUserProfile = asyncHandler(async (req, res) => {
   const userId = req.params.id;
   if (!userId) {
@@ -99,6 +108,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
     throw new Error('User not found');
   }
 });
+
 const updateUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (user) {
@@ -122,4 +132,29 @@ const updateUserProfile = asyncHandler(async (req, res) => {
     throw new Error('User not found');
   }
 });
+
+export const getUserGigHistory = asyncHandler(async (req, res) => {
+  const userWalletAddress = req.user.walletAddress.toLowerCase();
+
+  if (!userWalletAddress) {
+    res.status(400);
+    throw new Error('User wallet address not found in token.');
+  }
+
+  const postedGigs = await Gig.find({ clientAddress: userWalletAddress })
+    .sort({ createdAt: -1 })
+    .lean(); // Use .lean() for faster queries if not modifying docs
+
+  const acceptedGigs = await Gig.find({ freelancerAddress: userWalletAddress })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const history = [
+    ...postedGigs.map(gig => ({ ...gig, userRole: 'client' })),
+    ...acceptedGigs.map(gig => ({ ...gig, userRole: 'freelancer' })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  res.status(200).json(history);
+});
+
 export { getUserProfile, updateUserProfile };

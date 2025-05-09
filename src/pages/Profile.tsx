@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { Coins } from 'lucide-react';
+import axios from 'axios';
 
 const backendUrl = 'http://localhost:5002'; 
 
@@ -24,6 +26,9 @@ const Profile = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
   const { toast } = useToast();
+  const [gigHistory, setGigHistory] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
@@ -52,30 +57,59 @@ const Profile = () => {
     };
     if (token) fetchProfile();
   }, [token]);
+
+  useEffect(() => {
+    const fetchGigHistory = async () => {
+      if (!token || !authUser) return;
+      setIsLoadingHistory(true);
+      try {
+        const response = await axios.get(`${backendUrl}/api/v1/profile/me/gig-history`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setGigHistory(response.data);
+      } catch (error) {
+        console.error("Error fetching gig history:", error);
+        toast({
+          title: "Error Fetching Gig History",
+          description: "Could not load your gig activity.",
+          variant: "destructive",
+        });
+      }
+      setIsLoadingHistory(false);
+    };
+
+    fetchGigHistory();
+  }, [authUser, token, toast, backendUrl]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setEditableUser({ ...editableUser, [name]: value });
   };
+
   const handleSkillsChange = (e) => {
     setEditableUser({ ...editableUser, skills: e.target.value.split(',').map(skill => skill.trim()) });
   };
+
   const handlePortfolioChange = (index, field, value) => {
     const newPortfolio = [...editableUser.portfolio];
     newPortfolio[index][field] = value;
     setEditableUser({ ...editableUser, portfolio: newPortfolio });
   };
+
   const addPortfolioItem = () => {
     setEditableUser({
       ...editableUser,
       portfolio: [...(editableUser.portfolio || []), { title: '', description: '', url: '' }],
     });
   };
+
   const removePortfolioItem = (index) => {
     setEditableUser({
       ...editableUser,
       portfolio: editableUser.portfolio.filter((_, i) => i !== index),
     });
   };
+
   const handleImageChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -102,6 +136,7 @@ const Profile = () => {
       setUploading(false);
     }
   };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -126,6 +161,7 @@ const Profile = () => {
       setSaving(false);
     }
   };
+
   if (loading) {
     return (
       <div className="container mx-auto py-10 px-4 sm:px-6 lg:px-8">
@@ -159,10 +195,9 @@ const Profile = () => {
   return (
     <div className="container mx-auto py-10 px-4 sm:px-6 lg:px-8 animate-fade-in">
       <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
-        {}
-        <div className="flex flex-col items-center md:items-start gap-4">
-          <div className="relative group">
-            <Avatar className="h-32 w-32 border-4 border-web3-primary shadow-lg">
+        <div className="flex flex-col items-center md:items-start gap-4 w-full md:w-1/3 lg:w-1/4">
+          <div className="relative group w-32 h-32">
+            <Avatar className="h-full w-full border-4 border-primary shadow-lg">
               <AvatarImage src={imagePreview || (editableUser?.photoUrl ? backendUrl + editableUser.photoUrl : '/placeholder.svg')} alt={editableUser?.username} />
               <AvatarFallback>{editableUser?.username ? editableUser.username.split(' ').map(n => n[0]).join('') : '?'}</AvatarFallback>
             </Avatar>
@@ -172,11 +207,11 @@ const Profile = () => {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="absolute bottom-2 right-2 z-10"
+                  className="absolute bottom-1 right-1 z-10 bg-background/80 hover:bg-background text-xs px-2 py-1 h-auto"
                   onClick={() => fileInputRef.current && fileInputRef.current.click()}
                   disabled={uploading}
                 >
-                  {uploading ? 'Uploading...' : 'Change Photo'}
+                  {uploading ? 'Uploading...' : 'Change'}
                 </Button>
                 <input
                   type="file"
@@ -189,24 +224,48 @@ const Profile = () => {
               </>
             )}
           </div>
-          <div className="text-center md:text-left">
+          <div className="text-center md:text-left mt-2 w-full">
             {isEditing ? (
               <Input
                 name="username"
                 placeholder="Username"
                 value={editableUser?.username || ''}
                 onChange={handleInputChange}
-                className="text-3xl font-bold text-center md:text-left"
+                className="text-2xl font-bold text-center md:text-left mb-1"
               />
             ) : (
-              <h1 className="text-3xl font-bold">{user.username}</h1>
+              <h1 className="text-2xl font-bold truncate">{user.username}</h1>
             )}
-            <p className="text-muted-foreground">{user.title || 'Web3 Freelancer'}</p>
+            <p className="text-muted-foreground text-sm truncate">{user.walletAddress}</p>
           </div>
+          <Card className="w-full mt-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center">
+                <Coins className="w-5 h-5 mr-2 text-primary" />
+                SLT Balance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-foreground">
+                {user?.tokenBalance !== undefined ? user.tokenBalance.toLocaleString() : 'N/A'}
+                <span className="text-sm font-normal text-muted-foreground ml-1">SLT</span>
+              </p>
+               <p className="text-xs text-muted-foreground mt-1 italic">Simulated token balance</p>
+            </CardContent>
+          </Card>
         </div>
-        {}
-        <div className="flex-1 w-full">
-          {}
+        <div className="flex-1 w-full md:w-2/3 lg:w-3/4">
+          <div className="text-right mb-4">
+            {isEditing ? (
+              <Button onClick={handleSave} disabled={saving} size="sm" className="glow-btn">
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            ) : (
+              <Button onClick={() => setIsEditing(true)} variant="outline" size="sm" className="glow-btn-outline">
+                Edit Profile
+              </Button>
+            )}
+          </div>
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>About Me</CardTitle>
@@ -221,11 +280,10 @@ const Profile = () => {
                   rows={5}
                 />
               ) : (
-                <p>{user.aboutMe || 'No information provided.'}</p>
+                <p className="text-muted-foreground">{user.aboutMe || 'No information provided.'}</p>
               )}
             </CardContent>
           </Card>
-          {}
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Skills</CardTitle>
@@ -247,71 +305,65 @@ const Profile = () => {
               )}
             </CardContent>
           </Card>
-          {}
           <Card>
             <CardHeader>
               <CardTitle>Portfolio</CardTitle>
-              <CardDescription>Some of my recent projects.</CardDescription>
+              <CardDescription>Showcase your best work.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4">
+              <div className="space-y-4">
                 {isEditing ? (
                   <>
                     {editableUser?.portfolio?.map((project, index) => (
-                      <div key={index} className="border p-4 rounded-md">
+                      <div key={index} className="border p-4 rounded-md space-y-2">
                         <Input
                           placeholder="Project Title"
                           value={project.title}
                           onChange={(e) => handlePortfolioChange(index, 'title', e.target.value)}
-                          className="mb-2"
                         />
                         <Textarea
                           placeholder="Project Description"
                           value={project.description}
                           onChange={(e) => handlePortfolioChange(index, 'description', e.target.value)}
                           rows={2}
-                          className="mb-2"
                         />
                         <Input
-                          placeholder="Project URL"
+                          placeholder="Project URL (e.g., https://github.com/your/repo)"
                           value={project.url}
                           onChange={(e) => handlePortfolioChange(index, 'url', e.target.value)}
-                          className="mb-2"
                         />
-                        <Button variant="destructive" size="sm" onClick={() => removePortfolioItem(index)}>Remove</Button>
+                        <Button variant="destructive" size="sm" onClick={() => removePortfolioItem(index)}>Remove Project</Button>
                       </div>
                     ))}
                     <Button variant="outline" onClick={addPortfolioItem}>Add Portfolio Item</Button>
                   </>
-                ) : user.portfolio && user.portfolio.length > 0 ? (
-                  user.portfolio.map((project, index) => (
-                    <React.Fragment key={project.title + index}>
-                      <div>
-                        <h3 className="text-lg font-semibold">{project.title}</h3>
-                        <p className="text-muted-foreground text-sm">{project.description}</p>
-                        {project.url && (
-                          <a href={project.url} className="text-primary hover:underline text-sm" target="_blank" rel="noopener noreferrer">View Project</a>
-                        )}
-                      </div>
-                      {index < user.portfolio.length - 1 && <Separator />}
-                    </React.Fragment>
+                ) :
+                  user.portfolio && user.portfolio.length > 0 ? (
+                    user.portfolio.map((project, index) => (
+                      <React.Fragment key={project.title + index}>
+                        <div>
+                          <h3 className="text-lg font-semibold">{project.title}</h3>
+                          <p className="text-muted-foreground text-sm mb-1">{project.description}</p>
+                          {project.url && (
+                            <a 
+                              href={project.url.startsWith('http') ? project.url : `https://${project.url}`}
+                              className="text-primary hover:underline text-sm break-all"
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                            >
+                              {project.url}
+                            </a>
+                          )}
+                        </div>
+                        {index < user.portfolio.length - 1 && <Separator className="my-3" />}
+                      </React.Fragment>
                   ))
-                ) : (
-                  <p className="text-muted-foreground text-sm">No portfolio items added.</p>
+                  ) : (
+                  <p className="text-muted-foreground text-sm">No portfolio items added yet.</p>
                 )}
               </div>
             </CardContent>
           </Card>
-          {}
-          <div className="mt-6 text-center md:text-left">
-            {isEditing ? (
-              <Button onClick={handleSave} disabled={saving} className="glow-btn">
-                {saving ? 'Saving...' : 'Save Changes'}
-              </Button>
-            ) : (
-              <Button onClick={() => setIsEditing(true)} className="glow-btn">Edit Profile</Button>
-            )}
-          </div>
         </div>
       </div>
     </div>

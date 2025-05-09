@@ -2,6 +2,7 @@ import asyncHandler from 'express-async-handler';
 import Bounty from '../models/Bounty.js';
 import User from '../models/User.js';
 import { ethers } from 'ethers';
+import mongoose from 'mongoose';
 
 
 export const createBounty = asyncHandler(async (req, res) => {
@@ -70,7 +71,14 @@ export const getBounties = asyncHandler(async (req, res) => {
 
 
 export const getBountyById = asyncHandler(async (req, res) => {
-    const bounty = await Bounty.findById(req.params.id);
+    const bountyId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(bountyId)) {
+        res.status(400);
+        throw new Error('Invalid Bounty ID format');
+    }
+
+    const bounty = await Bounty.findById(bountyId);
 
     if (bounty) {
         res.status(200).json(bounty);

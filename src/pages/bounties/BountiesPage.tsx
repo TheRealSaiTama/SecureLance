@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import { Award, Plus, Clock, Tag, Search, Filter } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Bounty {
   _id: string;
@@ -42,85 +43,24 @@ const BountiesPage = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filter, setFilter] = useState<string>('newest');
+  const { token } = useAuth();
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002';
 
   useEffect(() => {
     const fetchBounties = async () => {
+      setIsLoading(true);
       try {
-        setIsLoading(true);
-        // For demo purposes, let's create some mock data
-        const mockBounties = [
-          {
-            _id: '1',
-            title: 'Smart Contract Security Audit',
-            description: 'Review a new DeFi protocol smart contract and identify security vulnerabilities.',
-            amount: 0.5,
-            category: 'development',
-            difficulty: 'Hard',
-            deadline: '2025-05-15',
-            status: 'Open',
-            creator: { username: 'devsecure', address: '0x1234...5678' },
-            upvotes: 12,
-            tags: ['Security', 'Solidity', 'Audit'],
-            createdAt: '2025-04-22'
-          },
-          {
-            _id: '2',
-            title: 'UI Design for NFT Marketplace',
-            description: 'Create a modern UI design for an NFT marketplace focusing on user experience.',
-            amount: 0.3,
-            category: 'design',
-            difficulty: 'Medium',
-            deadline: '2025-05-10',
-            status: 'Open',
-            creator: { username: 'creativecrypto', address: '0xabcd...efgh' },
-            upvotes: 8,
-            tags: ['UI/UX', 'NFT', 'Design'],
-            createdAt: '2025-04-24'
-          },
-          {
-            _id: '3',
-            title: 'ERC-20 Token Implementation',
-            description: 'Implement a basic ERC-20 token with additional features like reward distribution.',
-            amount: 0.4,
-            category: 'development',
-            difficulty: 'Medium',
-            deadline: '2025-05-20',
-            status: 'Open',
-            creator: { username: 'tokenwizard', address: '0x7890...1234' },
-            upvotes: 5,
-            tags: ['ERC-20', 'Solidity', 'TokenDev'],
-            createdAt: '2025-04-25'
-          },
-          {
-            _id: '4',
-            title: 'Write Technical Documentation',
-            description: 'Create comprehensive technical documentation for a new blockchain protocol.',
-            amount: 0.2,
-            category: 'content',
-            difficulty: 'Easy',
-            deadline: '2025-05-05',
-            status: 'In Progress',
-            creator: { username: 'docwriter', address: '0xefgh...ijkl' },
-            upvotes: 3,
-            tags: ['Documentation', 'Technical Writing', 'Blockchain'],
-            createdAt: '2025-04-20'
-          },
-          {
-            _id: '5',
-            title: 'Test New Wallet Integration',
-            description: 'Test the integration of multiple wallet providers with our dApp and document any issues.',
-            amount: 0.25,
-            category: 'testing',
-            difficulty: 'Easy',
-            deadline: '2025-05-08',
-            status: 'Completed',
-            creator: { username: 'testpro', address: '0x2468...1357' },
-            upvotes: 7,
-            tags: ['Testing', 'Wallets', 'Integration'],
-            createdAt: '2025-04-15'
-          }
-        ];
-        setBounties(mockBounties);
+        const params: Record<string, string> = {
+          sortBy: filter
+        };
+        if (selectedCategory !== 'all') {
+          params.category = selectedCategory;
+        }
+
+        const response = await axios.get(`${API_BASE_URL}/api/v1/bounties`, {
+          params: params,
+        });
+        setBounties(response.data);
       } catch (error) {
         console.error('Error fetching bounties:', error);
       } finally {
@@ -129,28 +69,14 @@ const BountiesPage = () => {
     };
 
     fetchBounties();
-  }, []);
+  }, [selectedCategory, filter, API_BASE_URL]);
 
-  // Filter and sort bounties
   const filteredBounties = bounties.filter(bounty => {
-    const matchesCategory = selectedCategory === 'all' || bounty.category === selectedCategory;
-    const matchesSearch = bounty.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const matchesSearch = !searchTerm || 
+                           bounty.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            bounty.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            bounty.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchesCategory && matchesSearch;
-  }).sort((a, b) => {
-    if (filter === 'newest') {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    } else if (filter === 'oldest') {
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    } else if (filter === 'highest-value') {
-      return b.amount - a.amount;
-    } else if (filter === 'lowest-value') {
-      return a.amount - b.amount;
-    } else if (filter === 'most-popular') {
-      return b.upvotes - a.upvotes;
-    }
-    return 0;
+    return matchesSearch;
   });
 
   return (
@@ -223,7 +149,6 @@ const BountiesPage = () => {
         <TabsContent value="all" className="mt-0">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {isLoading ? (
-              // Loading skeleton
               Array(6).fill(0).map((_, idx) => (
                 <Card key={idx} className="border border-border/50 shadow-sm">
                   <CardHeader className="animate-pulse bg-muted h-24 rounded-t-lg"></CardHeader>
@@ -338,7 +263,7 @@ const BountiesPage = () => {
                   >
                     <CardHeader className="pb-3">
                       <div className="flex justify-between items-start">
-                        <Badge variant="success">Open</Badge>
+                        <Badge variant="secondary">Open</Badge>
                         <Badge variant="outline" className="font-medium">
                           {bounty.amount} MATIC
                         </Badge>
@@ -394,7 +319,7 @@ const BountiesPage = () => {
                   >
                     <CardHeader className="pb-3">
                       <div className="flex justify-between items-start">
-                        <Badge variant="info">In Progress</Badge>
+                        <Badge variant="default">In Progress</Badge>
                         <Badge variant="outline" className="font-medium">
                           {bounty.amount} MATIC
                         </Badge>

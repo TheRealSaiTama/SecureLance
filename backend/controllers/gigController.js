@@ -3,31 +3,53 @@ import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import crypto from 'crypto';
 
+const GIG_POST_REWARD = 10; // Define the reward amount
+const GIG_ACCEPT_REWARD = 5; // Define the reward amount for accepting
+
 export const createGig = asyncHandler(async (req, res) => {
-    const { clientAddress, description, budget, contractGigId, escrowContractAddress } = req.body;
+    const { clientAddress, description, budget, contractGigId, escrowContractAddress, location } = req.body;
+    // Assuming req.user is populated by authentication middleware and contains the user ID
+    const clientId = req.user?._id;
+
+    if (!clientId) {
+        res.status(401); // Unauthorized
+        throw new Error('User not authenticated');
+    }
 
     if (!clientAddress || !description || !budget || !contractGigId || !escrowContractAddress) {
         res.status(400);
-        throw new Error('Please provide all required gig fields');
+        throw new Error('Please provide all required gig details');
     }
 
-    const gigExists = await Gig.findOne({ contractGigId, escrowContractAddress });
-
-    if (gigExists) {
-        res.status(400);
-        throw new Error('Gig metadata already exists for this contract gig');
-    }
-
-    const gig = await Gig.create({
-        clientAddress,
+    const gig = new Gig({
+        client: clientId, // Store user reference instead of just address
+        clientAddress, // Keep address too for potential filtering/display
         description,
         budget, 
         contractGigId,
         escrowContractAddress,
+        location,
     });
 
-    if (gig) {
-        res.status(201).json(gig);
+    const createdGig = await gig.save();
+
+    if (createdGig) {
+        // Award tokens to the client for posting
+        try {
+            const clientUser = await User.findById(clientId);
+            if (clientUser) {
+                clientUser.tokenBalance = (clientUser.tokenBalance || 0) + GIG_POST_REWARD;
+                await clientUser.save();
+                console.log(`Awarded ${GIG_POST_REWARD} SLT to user ${clientId} for posting gig ${createdGig._id}`);
+            } else {
+                console.error(`Could not find user ${clientId} to award tokens.`);
+            }
+        } catch (tokenError) {
+            console.error(`Error awarding tokens for gig ${createdGig._id}:`, tokenError);
+            // Don't fail the whole request, just log the token error
+        }
+
+        res.status(201).json(createdGig);
     } else {
         res.status(400);
         throw new Error('Invalid gig data');
@@ -83,9 +105,9 @@ export const selectFreelancer = asyncHandler(async (req, res) => {
     const { contractGigId } = req.params;
     const { escrowContractAddress } = req.query; 
 
-    if (!freelancerAddress || !escrowContractAddress) {
+    if (!freelancerAddress || !escrowContractAddress || !contractGigId) {
         res.status(400);
-        throw new Error('Freelancer address and escrow contract address are required');
+        throw new Error('Missing required fields: freelancerAddress, escrowContractAddress, contractGigId');
     }
 
     const gig = await Gig.findOne({ contractGigId, escrowContractAddress });
@@ -95,14 +117,119 @@ export const selectFreelancer = asyncHandler(async (req, res) => {
         throw new Error('Gig not found');
     }
 
+    // Log the fetched gig and its clientAddress field for debugging
+    console.log('[selectFreelancer] Fetched gig:', JSON.stringify(gig, null, 2));
+    console.log('[selectFreelancer] gig.clientAddress value:', gig.clientAddress);
+
+    // Log the walletAddress of the user making the request for debugging
+    if (req.user && req.user.walletAddress) {
+        console.log('[selectFreelancer] User making request walletAddress:', req.user.walletAddress);
+    } else {
+        console.log('[selectFreelancer] User making request or walletAddress is undefined.');
+    }
+
+    // Check if the user making the request is the client
+    const clientId = req.user?._id;
+    // Defensive check for gig.clientAddress before proceeding
+    if (!gig.clientAddress) {
+        console.error(`[selectFreelancer] Critical: Gig with contractGigId ${contractGigId} has no clientAddress defined.`);
+        res.status(500);
+        throw new Error('Gig data is inconsistent: clientAddress not defined.');
+    }
+    
+    // Check if user is the client by comparing clientAddress with user's walletAddress
+    if (!req.user || !req.user.walletAddress || gig.clientAddress.toLowerCase() !== req.user.walletAddress.toLowerCase()) {
+        res.status(403);
+        throw new Error('Only the client can select a freelancer for their gig.');
+    }
+
     if (gig.status !== 'Open') {
         res.status(400);
         throw new Error(`Gig is not Open, current status: ${gig.status}`);
     }
 
+    // Check if freelancer exists (optional but good practice)
+    const freelancerUser = await User.findOne({ walletAddress: freelancerAddress.toLowerCase() });
+    if (!freelancerUser) {
+        console.warn(`Attempted to assign non-existent user ${freelancerAddress} as freelancer.`);
+        // Depending on requirements, you might throw an error or just proceed
+        // For now, let's proceed but log a warning.
+    }
+
     gig.freelancerAddress = freelancerAddress.toLowerCase();
     gig.status = 'InProgress';
     const updatedGig = await gig.save();
+
+    // Award tokens to the freelancer upon selection
+    if (updatedGig && freelancerUser) { // Only award if user exists
+        try {
+            freelancerUser.tokenBalance = (freelancerUser.tokenBalance || 0) + GIG_ACCEPT_REWARD;
+            await freelancerUser.save();
+            console.log(`Awarded ${GIG_ACCEPT_REWARD} SLT to user ${freelancerUser._id} (${freelancerAddress}) for accepting gig ${updatedGig.contractGigId}`);
+        } catch (tokenError) {
+            console.error(`Error awarding tokens to freelancer for gig ${updatedGig.contractGigId}:`, tokenError);
+            // Don't fail the selection, just log error
+        }
+    }
+
+    res.status(200).json(updatedGig);
+});
+
+export const acceptGig = asyncHandler(async (req, res) => {
+    const { contractGigId } = req.params;
+    const { escrowContractAddress } = req.query;
+    const freelancerAddress = req.user.walletAddress; // Authenticated freelancer
+
+    if (!freelancerAddress || !escrowContractAddress || !contractGigId) {
+        res.status(400);
+        throw new Error('Missing required fields: freelancerAddress, escrowContractAddress, contractGigId');
+    }
+
+    const gig = await Gig.findOne({ contractGigId, escrowContractAddress });
+
+    if (!gig) {
+        res.status(404);
+        throw new Error('Gig not found');
+    }
+
+    if (gig.clientAddress.toLowerCase() === freelancerAddress.toLowerCase()) {
+        res.status(400);
+        throw new Error('Client cannot accept their own gig as a freelancer.');
+    }
+
+    if (gig.status !== 'Open') {
+        res.status(400);
+        throw new Error(`Gig is not Open, current status: ${gig.status}`);
+    }
+
+    if (gig.freelancerAddress) {
+        res.status(400);
+        throw new Error('Gig has already been accepted by another freelancer.');
+    }
+
+    const freelancerUser = await User.findById(req.user._id);
+    if (!freelancerUser) {
+        // This should ideally not happen if user is authenticated via protect middleware
+        console.error(`[acceptGig] Authenticated user ${req.user._id} not found in User collection.`);
+        res.status(404);
+        throw new Error('Freelancer user profile not found.');
+    }
+
+    gig.freelancerAddress = freelancerAddress.toLowerCase();
+    gig.status = 'InProgress';
+    const updatedGig = await gig.save();
+
+    // Award tokens to the freelancer upon selection
+    if (updatedGig && freelancerUser) {
+        try {
+            freelancerUser.tokenBalance = (freelancerUser.tokenBalance || 0) + GIG_ACCEPT_REWARD;
+            await freelancerUser.save();
+            console.log(`Awarded ${GIG_ACCEPT_REWARD} SLT to user ${freelancerUser._id} (${freelancerAddress}) for accepting gig ${updatedGig.contractGigId}`);
+        } catch (tokenError) {
+            console.error(`Error awarding tokens to freelancer for gig ${updatedGig.contractGigId}:`, tokenError);
+            // Don't fail the acceptance, just log error
+        }
+    }
 
     res.status(200).json(updatedGig);
 });

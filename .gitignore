@@ -1,0 +1,49 @@
+# Ignore .env files
+.env
+*.env
+.env.*
+!/.env.example
+
+# Node modules
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Cache directories
+.parcel-cache/
+.vite/
+cache/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Hardhat / Foundry
+artifacts/
+cache/
+deployments/ 

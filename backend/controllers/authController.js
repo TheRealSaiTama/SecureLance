@@ -8,10 +8,10 @@ const generateToken = (id) => {
   });
 };
 const signupUser = async (req, res) => {
-  const { username, walletAddress } = req.body;
+    const { username, walletAddress } = req.body;
   try {
     const userExists = await User.findOne({ $or: [{ username }, { walletAddress }] });
-    if (userExists) {
+    if (userExists) { 
       return res.status(400).json({ message: 'Username or Wallet Address already exists' });
     }
     const nonce = crypto.randomBytes(16).toString('hex');
@@ -46,9 +46,10 @@ const getNonceToSign = async (req, res) => {
       user = await User.create({
         walletAddress: address.toLowerCase(),
         username: `user_${address.substring(0, 6)}`, 
-        nonce: newNonce
+        nonce: newNonce,
+        tokenBalance: 1
       });
-      console.log(`New user created for address: ${address}`);
+      console.log(`New user created for address: ${address} with 1 token`);
     } else {
       user.nonce = crypto.randomBytes(16).toString('hex');
       await user.save();
@@ -89,6 +90,7 @@ export const verifySignatureAndLogin = async (req, res) => {
       username: user.username,
       walletAddress: user.walletAddress,
       token: token,
+      tokenBalance: user.tokenBalance
     });
   } catch (error) {
     console.error("Error in verifySignatureAndLogin:", error);
@@ -106,19 +108,16 @@ const protect = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.user = await User.findById(decoded.id).select('-password'); 
       if (!req.user) {
-        res.status(401);
-        throw new Error('Not authorized, user not found');
+        return res.status(401).json({ message: 'Not authorized, user not found' });
       }
       next(); 
     } catch (error) {
       console.error('Error in auth middleware:', error);
-      res.status(401);
-      throw new Error('Not authorized, token failed');
+      return res.status(401).json({ message: 'Not authorized, token failed', error: error.message });
     }
-  }
-  if (!token) {
-    res.status(401);
-    throw new Error('Not authorized, no token');
+  } else if (!token) {
+    return res.status(401).json({ message: 'Not authorized, no token' });
   }
 };
+
 export { generateToken, signupUser, getNonceToSign, protect };
