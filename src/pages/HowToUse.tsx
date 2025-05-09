@@ -9,7 +9,15 @@ const HowToUse = () => {
       </p>
       {/* Placeholder for video player */}
       <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
-        <p className="text-muted-foreground">Demo video coming soon!</p>
+        <iframe 
+            className="w-full h-full rounded-lg"
+            src="https://www.youtube.com/embed/DodILT2pDAY" 
+            title="YouTube video player" 
+            frameBorder="0" 
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+            referrerPolicy="strict-origin-when-cross-origin" 
+            allowFullScreen>
+        </iframe>
       </div>
     </div>
   );
